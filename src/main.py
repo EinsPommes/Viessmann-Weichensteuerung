@@ -1,9 +1,10 @@
 from servo_controller import ServoController
-from hall_sensor import HallSensorController
+from hall_sensor import HallSensor
 from automation_controller import AutomationController
-from gui import WeichenGUI
+from gui import GUI
 import json
 import os
+import tkinter as tk
 
 # Konfigurationswerte
 CONFIG = {
@@ -39,39 +40,28 @@ def save_config():
 
 def main():
     try:
-        # Konfiguration laden
-        load_config()
+        # Initialisiere Servo-Controller
+        servo_controller = ServoController()
         
-        # Servo-Controller initialisieren
-        servo_controller = ServoController(
-            num_servos=16,
-            pca_address=CONFIG['I2C_ADDRESS']
-        )
+        # Initialisiere Hall-Sensor-Controller
+        hall_sensor = HallSensor()
         
-        # Servo-Kalibrierungswerte setzen
-        servo_controller.LEFT_ANGLE = CONFIG['SERVO_CONFIG']['LEFT_ANGLE']
-        servo_controller.RIGHT_ANGLE = CONFIG['SERVO_CONFIG']['RIGHT_ANGLE']
+        # Initialisiere Automatik-Controller
+        automation = AutomationController(servo_controller)
         
-        # Hall-Sensor-Controller initialisieren
-        hall_controller = HallSensorController(CONFIG['HALL_SENSOR_PINS'])
+        # Starte GUI
+        root = tk.Tk()
+        app = GUI(root, servo_controller, automation)
+        root.protocol("WM_DELETE_WINDOW", lambda: cleanup(root, servo_controller))
+        root.mainloop()
+    except Exception as e:
+        print(f"Fehler beim Starten: {e}")
         
-        # Automatik-Controller initialisieren
-        automation_controller = AutomationController(servo_controller)
-        
-        # GUI starten
-        gui = WeichenGUI(servo_controller, hall_controller, automation_controller)
-        gui.run()
-        
-    except KeyboardInterrupt:
-        print("\nProgramm wird beendet...")
-    finally:
-        # Aufräumen
-        if 'automation_controller' in locals():
-            automation_controller.stop_automation()
-        if 'hall_controller' in locals():
-            hall_controller.cleanup()
-        # Konfiguration speichern
-        save_config()
+def cleanup(root, servo_controller):
+    """Aufräumen beim Beenden"""
+    print("Beende Programm...")
+    servo_controller.cleanup()
+    root.destroy()
 
 if __name__ == "__main__":
     main()

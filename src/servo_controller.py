@@ -1,99 +1,100 @@
-# from adafruit_servokit import ServoKit
+import RPi.GPIO as GPIO
 import time
+import json
 
 class ServoController:
-    def __init__(self, num_servos=16, pca_address=0x40):
-        """
-        Initialisiert den Servo-Controller
+    def __init__(self):
+        # GPIO Setup
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setwarnings(False)
         
-        Args:
-            num_servos (int): Anzahl der Servomotoren (Standard: 16)
-            pca_address (hex): I2C-Adresse des PCA9685 (Standard: 0x40)
-        """
-        # self.kit = ServoKit(channels=16, address=pca_address)
-        self.num_servos = num_servos
-        self.servo_positions = [0] * num_servos  # 0 = links, 1 = rechts
+        # Lade Servo-Konfiguration
+        self.load_config()
         
-        # Servo-Winkel für links/rechts Position (konfigurierbar)
-        self.LEFT_ANGLE = 0
-        self.RIGHT_ANGLE = 180
-        self.MIN_PULSE = 500
-        self.MAX_PULSE = 2500
+        # Initialisiere Servos
+        self.setup_servos()
         
-        # Initialisierung der Servos
-        self._init_servos()
+        # Status-Dictionary für alle Servos
+        self.servo_states = {}
+        for servo_id in range(len(self.servo_pins)):
+            self.servo_states[servo_id] = {
+                'position': 'left',  # 'left' oder 'right'
+                'sensor_ok': True    # True wenn Hall-Sensor OK
+            }
     
-    def _init_servos(self):
-        """Initialisiert alle Servos mit Standardwerten"""
-        for i in range(self.num_servos):
-            # self.kit.servo[i].set_pulse_width_range(self.MIN_PULSE, self.MAX_PULSE)
-            self.set_position(i, "left")  # Standardposition: links
+    def load_config(self):
+        """Lade Servo-Konfiguration aus config.json"""
+        try:
+            with open('src/config.json', 'r') as f:
+                config = json.load(f)
+                self.servo_pins = config.get('servo_pins', [])
+                self.servo_left_angles = config.get('servo_left_angles', [])
+                self.servo_right_angles = config.get('servo_right_angles', [])
+        except FileNotFoundError:
+            # Standard-Konfiguration für MG90S Servos
+            self.servo_pins = [17, 18, 27, 22, 23, 24, 25, 4, 5, 6, 13, 19]  # GPIO-Pins für 12 Servos
+            
+            # MG90S spezifische Winkel:
+            # - Duty Cycle von 5% (1ms) für 0° bis 10% (2ms) für 180°
+            # - Wir nutzen ~45° für links und ~135° für rechts
+            self.servo_left_angles = [6.5] * 12  # ~45° Position (links)
+            self.servo_right_angles = [8.5] * 12  # ~135° Position (rechts)
+            self.save_config()
     
-    def calibrate_servo(self, servo_num, min_pulse, max_pulse):
-        """
-        Kalibriert einen einzelnen Servo
-        
-        Args:
-            servo_num (int): Nummer des Servos (0-15)
-            min_pulse (int): Minimale Pulsweite in µs
-            max_pulse (int): Maximale Pulsweite in µs
-        """
-        if servo_num < 0 or servo_num >= self.num_servos:
-            raise ValueError(f"Ungültige Servo-Nummer: {servo_num}")
-            
-        # self.kit.servo[servo_num].set_pulse_width_range(min_pulse, max_pulse)
-        print(f"Kalibriere Servo {servo_num} mit Pulsen {min_pulse}-{max_pulse}")
+    def save_config(self):
+        """Speichere Servo-Konfiguration in config.json"""
+        config = {
+            'servo_pins': self.servo_pins,
+            'servo_left_angles': self.servo_left_angles,
+            'servo_right_angles': self.servo_right_angles
+        }
+        with open('src/config.json', 'w') as f:
+            json.dump(config, f, indent=4)
     
-    def set_position(self, servo_num, position):
-        """
-        Setzt die Position eines Servos
-        
-        Args:
-            servo_num (int): Nummer des Servos (0-15)
-            position (str): "left" oder "right"
-        """
-        if servo_num < 0 or servo_num >= self.num_servos:
-            raise ValueError(f"Ungültige Servo-Nummer: {servo_num}")
-            
-        if position.lower() not in ["left", "right"]:
-            raise ValueError("Position muss 'left' oder 'right' sein")
-            
-        angle = self.LEFT_ANGLE if position.lower() == "left" else self.RIGHT_ANGLE
-        # self.kit.servo[servo_num].angle = angle
-        print(f"Setze Servo {servo_num} auf Position {position} (Winkel: {angle})")
-        self.servo_positions[servo_num] = 0 if position.lower() == "left" else 1
-        
-        # Kurze Pause für die Servobewegung
-        time.sleep(0.1)
+    def setup_servos(self):
+        """Initialisiere alle Servo-Pins"""
+        self.servos = []
+        for pin in self.servo_pins:
+            GPIO.setup(pin, GPIO.OUT)
+            pwm = GPIO.PWM(pin, 50)  # 50Hz Frequenz
+            pwm.start(0)
+            self.servos.append(pwm)
     
-    def get_position(self, servo_num):
-        """
-        Gibt die aktuelle Position eines Servos zurück
-        
-        Args:
-            servo_num (int): Nummer des Servos (0-15)
+    def set_servo_position(self, servo_id, position):
+        """Setze Position eines Servos"""
+        if 0 <= servo_id < len(self.servos):
+            # MG90S benötigt eine sanfte Bewegung
+            angle = self.servo_left_angles[servo_id] if position == 'left' else self.servo_right_angles[servo_id]
             
-        Returns:
-            str: "left" oder "right"
-        """
-        if servo_num < 0 or servo_num >= self.num_servos:
-            raise ValueError(f"Ungültige Servo-Nummer: {servo_num}")
+            # Aktiviere PWM
+            self.servos[servo_id].ChangeDutyCycle(angle)
             
-        return "left" if self.servo_positions[servo_num] == 0 else "right"
-        
-    def test_servo(self, servo_num):
-        """
-        Testet einen Servo durch Bewegung in beide Positionen
-        
-        Args:
-            servo_num (int): Nummer des Servos (0-15)
-        """
-        if servo_num < 0 or servo_num >= self.num_servos:
-            raise ValueError(f"Ungültige Servo-Nummer: {servo_num}")
+            # Warte bis Servo Position erreicht hat (MG90S braucht ~0.1s/60°)
+            time.sleep(0.3)
             
-        print(f"Teste Servo {servo_num}...")
-        self.set_position(servo_num, "left")
-        time.sleep(1)
-        self.set_position(servo_num, "right")
-        time.sleep(1)
-        self.set_position(servo_num, "left")
+            # Stoppe PWM um Zittern zu vermeiden
+            self.servos[servo_id].ChangeDutyCycle(0)
+            
+            # Aktualisiere Status
+            self.servo_states[servo_id]['position'] = position
+    
+    def get_servo_position(self, servo_id):
+        """Gibt die aktuelle Position eines Servos zurück"""
+        if 0 <= servo_id < len(self.servos):
+            return self.servo_states[servo_id]['position']
+        return None
+    
+    def get_servo_states(self):
+        """Gibt den Status aller Servos zurück"""
+        return self.servo_states
+    
+    def set_sensor_status(self, servo_id, status):
+        """Setze den Status des Hall-Sensors für einen Servo"""
+        if 0 <= servo_id < len(self.servos):
+            self.servo_states[servo_id]['sensor_ok'] = status
+    
+    def cleanup(self):
+        """Aufräumen beim Beenden"""
+        for servo in self.servos:
+            servo.stop()
+        GPIO.cleanup()
