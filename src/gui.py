@@ -16,7 +16,7 @@ class GUI:
         self.canvas.pack(pady=10)
         
         # Streckenlayout
-        self.track_layout = TrackLayout(self.canvas)
+        self.track_layout = TrackLayout(self.canvas.winfo_width(), self.canvas.winfo_height())
         
         # Steuerungsbuttons
         self.control_frame = ttk.Frame(root)
@@ -53,17 +53,16 @@ class GUI:
     
     def update_switch_status(self):
         """Aktualisiert den Status aller Weichen"""
+        switch_states = {}
         for i in range(12):
             position = self.servo_controller.get_servo_position(i)
-            
-            # Status für Streckenlayout
-            switch_status = {
+            switch_states[i+1] = {
                 'position': position,
                 'sensor_ok': True  # Temporär immer True
             }
-            
-            # Layout aktualisieren
-            self.track_layout.update_switch(i, switch_status)
+        
+        # Layout aktualisieren
+        self.track_layout.draw(self.canvas, switch_states)
         
         # Alle 100ms aktualisieren
         self.root.after(100, self.update_switch_status)
