@@ -4,9 +4,9 @@ import json
 from track_layout import TrackLayout
 
 class WeichenGUI:
-    def __init__(self, servo_controller, hall_controller, automation_controller):
+    def __init__(self, servo_controller, automation_controller):
         self.servo_controller = servo_controller
-        self.hall_controller = hall_controller
+        # self.hall_controller = hall_controller
         self.automation_controller = automation_controller
         
         self.root = tk.Tk()
@@ -216,19 +216,19 @@ class WeichenGUI:
         
         for i in range(16):
             pos = self.servo_controller.get_position(i)
-            sensor_state = self.hall_controller.get_sensor_state(i)
+            # sensor_state = self.hall_controller.get_sensor_state(i)
             
             # Position aktualisieren
             self.switches[i]['pos_var'].set("Links" if pos == "left" else "Rechts")
             
             # Farbe basierend auf Sensor-Status
-            color = 'green' if sensor_state else 'red'
+            color = 'green'  # if sensor_state else 'red'
             self.switches[i]['pos_label'].configure(foreground=color)
             
             # Status für Streckenlayout speichern
             switch_states[i] = {
                 'position': pos,
-                'sensor_ok': sensor_state
+                'sensor_ok': True  # sensor_state
             }
         
         # Streckenlayout aktualisieren

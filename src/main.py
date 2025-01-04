@@ -43,15 +43,15 @@ def main():
         # Initialisiere Servo-Controller
         servo_controller = ServoController()
         
-        # Initialisiere Hall-Sensor-Controller
-        hall_sensor = HallSensor()
+        # Hall-Sensor temporär deaktiviert
+        # hall_sensor = HallSensor()
         
         # Initialisiere Automatik-Controller
         automation = AutomationController(servo_controller)
         
         # Starte GUI
         root = tk.Tk()
-        app = GUI(root, servo_controller, hall_sensor, automation)
+        app = GUI(root, servo_controller, automation)  # Hall-Sensor temporär entfernt
         root.protocol("WM_DELETE_WINDOW", lambda: cleanup(root, servo_controller))
         root.mainloop()
     except Exception as e:

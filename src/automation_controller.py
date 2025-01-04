@@ -18,10 +18,10 @@ class AutomationController:
         
         # Vordefinierte Muster
         self.patterns = {
-            "alternating": [(i, "left" if i % 2 == 0 else "right") for i in range(16)],
-            "all_left": [(i, "left") for i in range(16)],
-            "all_right": [(i, "right") for i in range(16)],
-            "zigzag": [(i, "left" if (i//4 + i%4) % 2 == 0 else "right") for i in range(16)]
+            "alternating": [(i, "left" if i % 2 == 0 else "right") for i in range(12)],
+            "all_left": [(i, "left") for i in range(12)],
+            "all_right": [(i, "right") for i in range(12)],
+            "zigzag": [(i, "left" if (i//4 + i%4) % 2 == 0 else "right") for i in range(12)]
         }
         
     def start_automation(self, mode="sequence"):
@@ -63,19 +63,19 @@ class AutomationController:
             
     def _run_sequence_mode(self):
         """Sequenzielles Schalten der Weichen"""
-        for i in range(16):
+        for i in range(12):  # Angepasst auf 12 Weichen
             if not self.running:
                 break
-            current_pos = self.servo_controller.get_position(i)
+            current_pos = self.servo_controller.get_servo_position(i)
             new_pos = "right" if current_pos == "left" else "left"
-            self.servo_controller.set_position(i, new_pos)
+            self.servo_controller.set_servo_position(i, new_pos)
             time.sleep(0.5)
             
     def _run_random_mode(self):
         """Zufälliges Schalten der Weichen"""
-        switch = random.randint(0, 15)
+        switch = random.randint(0, 11)  # Angepasst auf 12 Weichen
         position = random.choice(["left", "right"])
-        self.servo_controller.set_position(switch, position)
+        self.servo_controller.set_servo_position(switch, position)
         time.sleep(0.2)
         
     def _run_pattern_mode(self):
@@ -88,7 +88,7 @@ class AutomationController:
             for switch, position in pattern:
                 if not self.running:
                     break
-                self.servo_controller.set_position(switch, position)
+                self.servo_controller.set_servo_position(switch, position)
                 time.sleep(0.2)
             time.sleep(2)  # Pause zwischen den Mustern
             
