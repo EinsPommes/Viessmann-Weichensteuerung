@@ -11,8 +11,11 @@ class ServoController:
         
         # Standard-Konfiguration für MG90S Servos
         self.servo_pins = [17, 18, 27, 22, 23, 24, 25, 4, 5, 6, 13, 19, 26, 16, 20, 21]  # GPIO-Pins für 16 Servos
-        self.servo_left_angles = [6.5] * 16  # ~45° Position (links)
-        self.servo_right_angles = [8.5] * 16  # ~135° Position (rechts)
+        
+        # MG90S Servo Kalibrierung:
+        # 2.5 = 0° / 7.5 = 90° / 12.5 = 180°
+        self.servo_left_angles = [2.5] * 16   # 0° Position (links)
+        self.servo_right_angles = [12.5] * 16  # 180° Position (rechts)
         
         # Lade Servo-Konfiguration wenn vorhanden
         self.load_config()
@@ -92,8 +95,23 @@ class ServoController:
             
             # Setze Servo-Position
             pwm = GPIO.PWM(pin, 50)  # 50 Hz
-            pwm.start(angle)
+            pwm.start(0)  # Start mit 0
+            
+            # Sanft zur Zielposition bewegen
+            current = 0
+            target = angle
+            step = 0.5 if target > current else -0.5
+            
+            while abs(current - target) > 0.1:
+                current += step
+                pwm.ChangeDutyCycle(current)
+                time.sleep(0.02)  # 20ms Pause zwischen Schritten
+            
+            # Finale Position
+            pwm.ChangeDutyCycle(target)
             time.sleep(0.5)
+            
+            # PWM stoppen
             pwm.stop()
             
             # Aktualisiere Status
