@@ -9,47 +9,106 @@ class GUI:
         self.servo_controller = servo_controller
         self.automation_controller = automation_controller
         
-        self.root.title("Weichensteuerung")
+        self.root.title("Viessmann Weichensteuerung")
+        
+        # Bildschirmgröße ermitteln und Fenstergröße anpassen
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        
+        # Für 10 Zoll Display optimierte Größe (1280x800)
+        window_width = min(1280, screen_width)
+        window_height = min(800, screen_height)
+        
+        # Fenster zentrieren
+        x = (screen_width - window_width) // 2
+        y = (screen_height - window_height) // 2
+        
+        self.root.geometry(f"{window_width}x{window_height}+{x}+{y}")
+        
+        # Stil konfigurieren für bessere Touch-Bedienung
+        self.style = ttk.Style()
+        self.style.configure('Title.TLabel', font=('Helvetica', 28, 'bold'))
+        self.style.configure('Subtitle.TLabel', font=('Helvetica', 18))
+        self.style.configure('Switch.TFrame', padding=8)
+        self.style.configure('Switch.TLabel', font=('Helvetica', 14))
+        self.style.configure('TButton', padding=5)
+        
+        # Hauptcontainer mit zwei Spalten
+        main_container = ttk.Frame(self.root, padding="15")
+        main_container.grid(row=0, column=0, sticky="nsew")
+        
+        # Linke Spalte für Steuerung
+        control_frame = ttk.Frame(main_container)
+        control_frame.grid(row=0, column=0, sticky="nsew", padx=(0,15))
+        
+        # Rechte Spalte für Streckenlayout
+        layout_frame = ttk.LabelFrame(main_container, text="Streckenübersicht")
+        layout_frame.grid(row=0, column=1, sticky="nsew", padx=(15,0))
         
         # Canvas für Streckenlayout
-        self.canvas = tk.Canvas(root, width=800, height=500, bg='white')
-        self.canvas.pack(pady=10)
+        self.canvas = tk.Canvas(layout_frame, width=800, height=500, bg='white')
+        self.canvas.pack(padx=10, pady=10)
         
-        # Streckenlayout
+        # Streckenlayout initialisieren
         self.track_layout = TrackLayout(self.canvas.winfo_width(), self.canvas.winfo_height())
         
-        # Steuerungsbuttons
-        self.control_frame = ttk.Frame(root)
-        self.control_frame.pack(pady=10)
+        # GUI-Elemente erstellen
+        self._create_control_elements(control_frame)
         
-        ttk.Button(self.control_frame, text="Test Weichen", 
-                  command=self.test_switches).pack(side=tk.LEFT, padx=5)
+        # Status aktualisieren
+        self.update_switch_status()
         
-        # Automatik-Steuerung
-        self.auto_frame = ttk.LabelFrame(root, text="Automatik")
-        self.auto_frame.pack(pady=10)
+    def _create_control_elements(self, parent):
+        """Erstellt die Steuerungselemente"""
+        # Titel
+        title = ttk.Label(parent, text="Viessmann Weichensteuerung", 
+                         style='Title.TLabel')
+        title.grid(row=0, column=0, columnspan=4, pady=(0,10))
+        
+        # Untertitel
+        subtitle = ttk.Label(parent, text="Systemstatus und Kontrolle",
+                           style='Subtitle.TLabel')
+        subtitle.grid(row=1, column=0, columnspan=4, pady=(0,25))
+        
+        # Automatik-Frame
+        auto_frame = ttk.LabelFrame(parent, text="Automatik-Modus", padding=15)
+        auto_frame.grid(row=2, column=0, columnspan=4, sticky="ew", padx=10, pady=(0,25))
         
         # Modus-Auswahl
+        ttk.Label(auto_frame, text="Modus:", font=('Helvetica', 14)).grid(row=0, column=0, padx=(0,15))
+        
         self.mode_var = tk.StringVar(value="sequence")
         modes = [("Sequentiell", "sequence"), 
                 ("Zufällig", "random"), 
                 ("Muster", "pattern")]
         
-        for text, mode in modes:
-            ttk.Radiobutton(self.auto_frame, text=text, value=mode, 
-                          variable=self.mode_var).pack(side=tk.LEFT, padx=5)
+        for idx, (text, mode) in enumerate(modes):
+            rb = ttk.Radiobutton(auto_frame, text=text, value=mode,
+                               variable=self.mode_var)
+            rb.grid(row=0, column=idx+1, padx=15)
         
-        ttk.Button(self.auto_frame, text="Start", 
+        # Start/Stop Buttons
+        button_frame = ttk.Frame(auto_frame)
+        button_frame.grid(row=1, column=0, columnspan=4, pady=(15,0))
+        
+        ttk.Button(button_frame, text="Start", 
                   command=self.start_automation).pack(side=tk.LEFT, padx=5)
-        ttk.Button(self.auto_frame, text="Stop", 
+        ttk.Button(button_frame, text="Stop", 
                   command=self.stop_automation).pack(side=tk.LEFT, padx=5)
         
-        # Status-Anzeige
-        self.status_label = ttk.Label(root, text="Bereit")
-        self.status_label.pack(pady=5)
+        # Weichen testen
+        test_frame = ttk.LabelFrame(parent, text="Weichen testen", padding=15)
+        test_frame.grid(row=3, column=0, columnspan=4, sticky="ew", padx=10, pady=(0,25))
         
-        # Weichenstatus aktualisieren
-        self.update_switch_status()
+        ttk.Button(test_frame, text="Alle Weichen testen",
+                  command=self.test_switches).pack(expand=True)
+        
+        # Status-Anzeige
+        self.status_label = ttk.Label(parent, text="Bereit")
+        self.status_label.grid(row=4, column=0, columnspan=4, pady=5)
+        
+        # Grid-Konfiguration
+        parent.grid_columnconfigure(0, weight=1)
     
     def update_switch_status(self):
         """Aktualisiert den Status aller Weichen"""

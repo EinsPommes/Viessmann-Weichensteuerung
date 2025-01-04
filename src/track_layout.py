@@ -1,5 +1,4 @@
 import tkinter as tk
-from tkinter import ttk
 
 class TrackLayout:
     def __init__(self, canvas_width=800, canvas_height=500):
@@ -48,86 +47,44 @@ class TrackLayout:
                 # Diagonale Verbindungen
                 {'from': 2, 'to': 5},
                 {'from': 3, 'to': 7},
-                
-                # Rechte Schleife
-                {'from': 9, 'to': 10},
-                {'from': 11, 'to': 12},
-                {'from': 10, 'to': 12}
+                {'from': 6, 'to': 10},
+                {'from': 8, 'to': 12}
             ]
         }
     
     def draw(self, canvas, switch_states):
         """Zeichnet das Streckenlayout auf dem Canvas"""
-        canvas.delete('all')  # Canvas leeren
-        
-        # Hintergrund
-        canvas.create_rectangle(0, 0, self.width, self.height, 
-                              fill='white', outline='')
+        # Canvas leeren
+        canvas.delete("all")
         
         # Gleise zeichnen
         for track in self.layout['tracks']:
             start = self.layout['switches'][track['from']]
             end = self.layout['switches'][track['to']]
             canvas.create_line(start['x'], start['y'], 
-                             end['x'], end['y'],
-                             width=2, fill='black')
-        
-        # Rechte Schleife zeichnen
-        x1, y1 = 700, 200  # Weiche 10
-        x2, y2 = 700, 300  # Weiche 12
-        canvas.create_line(x1, y1, x2, y2, width=2, fill='black')
-        
-        # Fahrtrichtungspfeile
-        arrow_points = [
-            (50, 100, 'down'),   # Links oben
-            (50, 400, 'up'),     # Links unten
-            (750, 100, 'down'),  # Rechts oben
-            (750, 400, 'up')     # Rechts unten
-        ]
-        
-        for x, y, direction in arrow_points:
-            if direction == 'down':
-                canvas.create_line(x, y-20, x, y+20,
-                                 arrow='last', width=2, fill='blue')
-            else:
-                canvas.create_line(x, y+20, x, y-20,
-                                 arrow='last', width=2, fill='blue')
+                             end['x'], end['y'], 
+                             width=2)
         
         # Weichen zeichnen
-        for num, switch in self.layout['switches'].items():
+        for switch_id, pos in self.layout['switches'].items():
             # Weichenstatus abrufen
-            state = switch_states.get(num-1, {})
-            position = state.get('position', 'left')
-            is_ok = state.get('sensor_ok', True)
+            state = switch_states.get(switch_id, {'position': 'left', 'sensor_ok': True})
             
-            # Weiche zeichnen
-            size = 24
-            canvas.create_oval(switch['x']-size/2, switch['y']-size/2,
-                             switch['x']+size/2, switch['y']+size/2,
-                             fill='white', outline='black', width=2)
+            # Farbe basierend auf Sensor-Status
+            color = 'green' if state['sensor_ok'] else 'red'
             
-            # Innerer farbiger Kreis
-            inner_size = 20
-            canvas.create_oval(switch['x']-inner_size/2, switch['y']-inner_size/2,
-                             switch['x']+inner_size/2, switch['y']+inner_size/2,
-                             fill='green' if is_ok else 'red',
-                             outline='')
+            # Weiche als Kreis zeichnen
+            canvas.create_oval(pos['x']-10, pos['y']-10,
+                             pos['x']+10, pos['y']+10,
+                             fill=color, outline='black')
             
             # Weichennummer
-            canvas.create_text(switch['x'], switch['y'],
-                             text=str(num), fill='white', 
-                             font=('Helvetica', 10, 'bold'))
+            canvas.create_text(pos['x'], pos['y'],
+                             text=str(switch_id),
+                             fill='white')
             
-            # Weichenstellung anzeigen
-            arrow_length = 12
-            arrow_offset = 8
-            if position == 'left':
-                # Pfeil nach links oben
-                canvas.create_line(switch['x'], switch['y'],
-                                 switch['x']-arrow_length, switch['y']-arrow_offset,
-                                 arrow='last', width=2, fill='white')
-            else:
-                # Pfeil nach rechts oben
-                canvas.create_line(switch['x'], switch['y'],
-                                 switch['x']+arrow_length, switch['y']-arrow_offset,
-                                 arrow='last', width=2, fill='white')
+            # Position anzeigen
+            pos_text = "←" if state['position'] == 'left' else "→"
+            canvas.create_text(pos['x'], pos['y']-20,
+                             text=pos_text,
+                             fill='black')
