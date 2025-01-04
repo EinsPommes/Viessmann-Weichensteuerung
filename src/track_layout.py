@@ -57,6 +57,22 @@ class TrackLayout:
         # Canvas leeren
         canvas.delete("all")
         
+        # Fahrtrichtungspfeile
+        arrow_points = [
+            (50, 100, 'down'),   # Links oben
+            (50, 400, 'up'),     # Links unten
+            (750, 100, 'down'),  # Rechts oben
+            (750, 400, 'up')     # Rechts unten
+        ]
+        
+        for x, y, direction in arrow_points:
+            if direction == 'down':
+                canvas.create_line(x, y-20, x, y+20,
+                                 arrow='last', width=2, fill='blue')
+            else:
+                canvas.create_line(x, y+20, x, y-20,
+                                 arrow='last', width=2, fill='blue')
+        
         # Gleise zeichnen
         for track in self.layout['tracks']:
             start = self.layout['switches'][track['from']]
@@ -70,21 +86,15 @@ class TrackLayout:
             # Weichenstatus abrufen
             state = switch_states.get(switch_id, {'position': 'left', 'sensor_ok': True})
             
-            # Farbe basierend auf Sensor-Status
-            color = 'green' if state['sensor_ok'] else 'red'
-            
             # Weiche als Kreis zeichnen
-            canvas.create_oval(pos['x']-10, pos['y']-10,
-                             pos['x']+10, pos['y']+10,
-                             fill=color, outline='black')
+            size = 24
+            canvas.create_oval(pos['x']-size/2, pos['y']-size/2,
+                             pos['x']+size/2, pos['y']+size/2,
+                             fill='green' if state['sensor_ok'] else 'red',
+                             outline='black')
             
             # Weichennummer
             canvas.create_text(pos['x'], pos['y'],
                              text=str(switch_id),
-                             fill='white')
-            
-            # Position anzeigen
-            pos_text = "←" if state['position'] == 'left' else "→"
-            canvas.create_text(pos['x'], pos['y']-20,
-                             text=pos_text,
-                             fill='black')
+                             fill='white',
+                             font=('Helvetica', 10, 'bold'))
