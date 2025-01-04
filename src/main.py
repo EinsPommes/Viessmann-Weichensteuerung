@@ -5,6 +5,7 @@ from gui import GUI
 import json
 import os
 import tkinter as tk
+import sys
 
 # Konfigurationswerte
 CONFIG = {
@@ -49,14 +50,17 @@ def main():
         # Initialisiere Automatik-Controller
         automation = AutomationController(servo_controller)
         
-        # Starte GUI
+        # Erstelle GUI
         root = tk.Tk()
-        app = GUI(root, servo_controller, automation)  # Hall-Sensor temporär entfernt
-        root.protocol("WM_DELETE_WINDOW", lambda: cleanup(root, servo_controller))
-        root.mainloop()
-    except Exception as e:
-        print(f"Fehler beim Starten: {e}")
+        gui = GUI(root, servo_controller, automation)
         
+        # Starte GUI
+        root.mainloop()
+        
+    except Exception as e:
+        print(f"Fehler beim Starten: {str(e)}", file=sys.stderr)
+        sys.exit(1)
+
 def cleanup(root, servo_controller):
     """Aufräumen beim Beenden"""
     print("Beende Programm...")
