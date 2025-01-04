@@ -32,13 +32,13 @@ class ServoController:
                 self.servo_right_angles = config.get('servo_right_angles', [])
         except FileNotFoundError:
             # Standard-Konfiguration für MG90S Servos
-            self.servo_pins = [17, 18, 27, 22, 23, 24, 25, 4, 5, 6, 13, 19]  # GPIO-Pins für 12 Servos
+            self.servo_pins = [17, 18, 27, 22, 23, 24, 25, 4, 5, 6, 13, 19, 26, 16, 20, 21]  # GPIO-Pins für 16 Servos
             
             # MG90S spezifische Winkel:
             # - Duty Cycle von 5% (1ms) für 0° bis 10% (2ms) für 180°
             # - Wir nutzen ~45° für links und ~135° für rechts
-            self.servo_left_angles = [6.5] * 12  # ~45° Position (links)
-            self.servo_right_angles = [8.5] * 12  # ~135° Position (rechts)
+            self.servo_left_angles = [6.5] * 16  # ~45° Position (links)
+            self.servo_right_angles = [8.5] * 16  # ~135° Position (rechts)
             self.save_config()
     
     def save_config(self):

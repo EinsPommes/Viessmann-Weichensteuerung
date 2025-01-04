@@ -174,12 +174,16 @@ class GUI:
             
             # GUI aktualisieren
             switch = self.switches[i]
-            switch['status_var'].set("Rechts" if position == 'right' else "Links")
+            status_text = "Rechts" if position == 'right' else "Links"
+            switch['status_var'].set(status_text)
+            switch['status_label'].config(
+                foreground='green' if self.servo_controller.servo_states[i]['sensor_ok'] else 'red'
+            )
             
             # Status für Streckenlayout
             switch_states[i+1] = {
                 'position': position,
-                'sensor_ok': True  # Temporär immer True
+                'sensor_ok': self.servo_controller.servo_states[i]['sensor_ok']
             }
         
         # Layout aktualisieren

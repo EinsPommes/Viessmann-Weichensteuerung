@@ -18,10 +18,10 @@ class AutomationController:
         
         # Vordefinierte Muster
         self.patterns = {
-            "alternating": [(i, "left" if i % 2 == 0 else "right") for i in range(12)],
-            "all_left": [(i, "left") for i in range(12)],
-            "all_right": [(i, "right") for i in range(12)],
-            "zigzag": [(i, "left" if (i//4 + i%4) % 2 == 0 else "right") for i in range(12)]
+            "alternating": [(i, "left" if i % 2 == 0 else "right") for i in range(16)],
+            "all_left": [(i, "left") for i in range(16)],
+            "all_right": [(i, "right") for i in range(16)],
+            "zigzag": [(i, "left" if (i//4 + i%4) % 2 == 0 else "right") for i in range(16)]
         }
         
     def start_automation(self, mode="sequence"):
@@ -63,7 +63,7 @@ class AutomationController:
             
     def _run_sequence_mode(self):
         """Sequenzielles Schalten der Weichen"""
-        for i in range(12):  # Angepasst auf 12 Weichen
+        for i in range(16):  # Angepasst auf 16 Weichen
             if not self.running:
                 break
             current_pos = self.servo_controller.get_servo_position(i)
@@ -73,7 +73,7 @@ class AutomationController:
             
     def _run_random_mode(self):
         """Zufälliges Schalten der Weichen"""
-        switch = random.randint(0, 11)  # Angepasst auf 12 Weichen
+        switch = random.randint(0, 15)  # Angepasst auf 16 Weichen
         position = random.choice(["left", "right"])
         self.servo_controller.set_servo_position(switch, position)
         time.sleep(0.2)
