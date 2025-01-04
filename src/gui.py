@@ -11,43 +11,41 @@ class GUI:
         
         self.root.title("Viessmann Weichensteuerung")
         
-        # Bildschirmgröße ermitteln und Fenstergröße anpassen
-        screen_width = self.root.winfo_screenwidth()
-        screen_height = self.root.winfo_screenheight()
-        window_width = min(1280, screen_width)
-        window_height = min(800, screen_height)
+        # Vollbildmodus für 10 Zoll Display
+        self.root.attributes('-fullscreen', True)
         
-        # Fenster zentrieren
-        x = (screen_width - window_width) // 2
-        y = (screen_height - window_height) // 2
-        self.root.geometry(f"{window_width}x{window_height}+{x}+{y}")
+        # Stil für Touch-Display optimieren
+        self.style = ttk.Style()
+        self.style.configure('TButton', padding=5)  # Größere Buttons
+        self.style.configure('TRadiobutton', padding=5)  # Größere Radiobuttons
         
         # Hauptcontainer
         main_container = ttk.Frame(self.root)
-        main_container.pack(expand=True, fill='both', padx=20, pady=20)
+        main_container.pack(expand=True, fill='both', padx=10, pady=5)
         
         # Linke Spalte
         left_frame = ttk.Frame(main_container)
-        left_frame.pack(side=tk.LEFT, fill='y', padx=(0, 20))
+        left_frame.pack(side=tk.LEFT, fill='both', expand=True, padx=(0, 5))
         
         # Titel
         title = ttk.Label(left_frame, text="Viessmann Weichensteuerung",
-                         font=('Helvetica', 24, 'bold'))
-        title.pack(anchor='w', pady=(0, 5))
+                         font=('Helvetica', 20, 'bold'))
+        title.pack(anchor='w', pady=(0, 2))
         
         subtitle = ttk.Label(left_frame, text="Systemstatus und Kontrolle",
-                           font=('Helvetica', 14))
-        subtitle.pack(anchor='w', pady=(0, 20))
+                           font=('Helvetica', 12))
+        subtitle.pack(anchor='w', pady=(0, 10))
         
         # Automatik-Modus Frame
         auto_frame = ttk.LabelFrame(left_frame, text="Automatik-Modus")
-        auto_frame.pack(fill='x', pady=(0, 20))
+        auto_frame.pack(fill='x', pady=(0, 10))
         
         # Modus-Auswahl
         mode_frame = ttk.Frame(auto_frame)
-        mode_frame.pack(padx=10, pady=5)
+        mode_frame.pack(padx=5, pady=2)
         
-        ttk.Label(mode_frame, text="Modus:").pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Label(mode_frame, text="Modus:", 
+                 font=('Helvetica', 10)).pack(side=tk.LEFT, padx=(0, 5))
         
         self.mode_var = tk.StringVar(value="sequence")
         ttk.Radiobutton(mode_frame, text="Sequentiell", value="sequence",
@@ -59,25 +57,31 @@ class GUI:
         
         # Start/Stop Buttons
         button_frame = ttk.Frame(auto_frame)
-        button_frame.pack(padx=10, pady=5)
+        button_frame.pack(padx=5, pady=2)
         
         ttk.Button(button_frame, text="Start Automatik",
-                  command=self.start_automation).pack(side=tk.LEFT, padx=5)
+                  command=self.start_automation).pack(side=tk.LEFT, padx=2)
         ttk.Button(button_frame, text="Stop Automatik",
-                  command=self.stop_automation).pack(side=tk.LEFT, padx=5)
+                  command=self.stop_automation).pack(side=tk.LEFT, padx=2)
         
         # Legende
         legend_frame = ttk.Frame(left_frame)
-        legend_frame.pack(fill='x', pady=(0, 20))
+        legend_frame.pack(fill='x', pady=(0, 10))
         
         ttk.Label(legend_frame, text="Position korrekt",
-                 foreground='green').pack(side=tk.LEFT, padx=(0, 20))
+                 foreground='green').pack(side=tk.LEFT, padx=(0, 10))
         ttk.Label(legend_frame, text="Position fehlerhaft",
                  foreground='red').pack(side=tk.LEFT)
         
         # Weichen-Grid
         switches_frame = ttk.Frame(left_frame)
         switches_frame.pack(fill='both', expand=True)
+        
+        # Grid-Konfiguration für gleichmäßige Verteilung
+        for i in range(4):
+            switches_frame.columnconfigure(i, weight=1)
+        for i in range(4):
+            switches_frame.rowconfigure(i, weight=1)
         
         self.switches = []
         for i in range(16):
@@ -86,34 +90,35 @@ class GUI:
             
             # Weichen-Frame
             switch_frame = ttk.Frame(switches_frame)
-            switch_frame.grid(row=row, column=col, padx=5, pady=5)
+            switch_frame.grid(row=row, column=col, padx=2, pady=2, sticky='nsew')
             
             # Weichennummer und Status
             header_frame = ttk.Frame(switch_frame)
             header_frame.pack(fill='x')
             
-            ttk.Label(header_frame, text=f"Weiche {i+1}").pack(side=tk.LEFT)
+            ttk.Label(header_frame, text=f"Weiche {i+1}",
+                     font=('Helvetica', 10)).pack(side=tk.LEFT)
             status_var = tk.StringVar(value="Rechts")
             status_label = ttk.Label(header_frame, textvariable=status_var,
-                                   foreground='green')
+                                   foreground='green', font=('Helvetica', 10))
             status_label.pack(side=tk.RIGHT)
             
             # Steuerungsbuttons
             btn_frame = ttk.Frame(switch_frame)
-            btn_frame.pack(pady=2)
+            btn_frame.pack(pady=1)
             
-            left_btn = ttk.Button(btn_frame, text="←", width=3,
+            left_btn = ttk.Button(btn_frame, text="←", width=2,
                                 command=lambda x=i: self.set_switch(x, 'left'))
             left_btn.pack(side=tk.LEFT, padx=1)
             
-            right_btn = ttk.Button(btn_frame, text="→", width=3,
+            right_btn = ttk.Button(btn_frame, text="→", width=2,
                                  command=lambda x=i: self.set_switch(x, 'right'))
             right_btn.pack(side=tk.LEFT, padx=1)
             
             # Test-Button
-            test_btn = ttk.Button(switch_frame, text="Test",
+            test_btn = ttk.Button(switch_frame, text="Test", width=6,
                                 command=lambda x=i: self.test_switch(x))
-            test_btn.pack(pady=2)
+            test_btn.pack(pady=1)
             
             self.switches.append({
                 'status_var': status_var,
@@ -125,23 +130,27 @@ class GUI:
         
         # Rechte Spalte - Streckenlayout
         right_frame = ttk.LabelFrame(main_container, text="Streckenübersicht")
-        right_frame.pack(side=tk.LEFT, fill='both', expand=True)
+        right_frame.pack(side=tk.LEFT, fill='both', expand=True, padx=(5, 0))
         
-        self.canvas = tk.Canvas(right_frame, width=800, height=500, bg='white')
-        self.canvas.pack(padx=10, pady=10)
+        # Canvas für Streckenlayout
+        self.canvas = tk.Canvas(right_frame, width=600, height=400, bg='white')
+        self.canvas.pack(padx=5, pady=5, expand=True, fill='both')
         
         # Streckenlayout
         self.track_layout = TrackLayout(self.canvas.winfo_width(), self.canvas.winfo_height())
         
         # Footer
         footer_frame = ttk.Frame(self.root)
-        footer_frame.pack(fill='x', padx=20, pady=10)
+        footer_frame.pack(fill='x', padx=10, pady=2)
         
         ttk.Button(footer_frame, text="✕ Beenden",
                   command=self.root.destroy).pack(side=tk.LEFT)
         
         ttk.Label(footer_frame, text="Developed by EinsPommes × chill-zone.xyz",
-                 foreground='gray').pack(side=tk.RIGHT)
+                 foreground='gray', font=('Helvetica', 8)).pack(side=tk.RIGHT)
+        
+        # ESC zum Beenden
+        self.root.bind('<Escape>', lambda e: self.root.destroy())
         
         # Status aktualisieren
         self.update_switch_status()
