@@ -9,7 +9,12 @@ class ServoController:
         GPIO.setmode(GPIO.BCM)
         GPIO.setwarnings(False)
         
-        # Lade Servo-Konfiguration
+        # Standard-Konfiguration für MG90S Servos
+        self.servo_pins = [17, 18, 27, 22, 23, 24, 25, 4, 5, 6, 13, 19, 26, 16, 20, 21]  # GPIO-Pins für 16 Servos
+        self.servo_left_angles = [6.5] * 16  # ~45° Position (links)
+        self.servo_right_angles = [8.5] * 16  # ~135° Position (rechts)
+        
+        # Lade Servo-Konfiguration wenn vorhanden
         self.load_config()
         
         # Initialisiere Servos
@@ -27,21 +32,22 @@ class ServoController:
         """Lade Servo-Konfiguration aus config.json"""
         try:
             config_path = os.path.join(os.path.dirname(__file__), 'config.json')
-            with open(config_path, 'r') as f:
-                config = json.load(f)
-                self.servo_pins = config.get('servo_pins', [])
-                self.servo_left_angles = config.get('servo_left_angles', [])
-                self.servo_right_angles = config.get('servo_right_angles', [])
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+                    # Nur gültige Konfigurationen übernehmen
+                    if len(config.get('servo_pins', [])) == 16:
+                        self.servo_pins = config['servo_pins']
+                    if len(config.get('servo_left_angles', [])) == 16:
+                        self.servo_left_angles = config['servo_left_angles']
+                    if len(config.get('servo_right_angles', [])) == 16:
+                        self.servo_right_angles = config['servo_right_angles']
         except (FileNotFoundError, json.JSONDecodeError):
-            # Standard-Konfiguration für MG90S Servos
-            self.servo_pins = [17, 18, 27, 22, 23, 24, 25, 4, 5, 6, 13, 19, 26, 16, 20, 21]  # GPIO-Pins für 16 Servos
-            
-            # MG90S spezifische Winkel:
-            # - Duty Cycle von 5% (1ms) für 0° bis 10% (2ms) für 180°
-            # - Wir nutzen ~45° für links und ~135° für rechts
-            self.servo_left_angles = [6.5] * 16  # ~45° Position (links)
-            self.servo_right_angles = [8.5] * 16  # ~135° Position (rechts)
-            self.save_config()
+            # Bei Fehler Standard-Konfiguration behalten
+            pass
+        
+        # Konfiguration speichern
+        self.save_config()
     
     def save_config(self):
         """Speichere Servo-Konfiguration in config.json"""
@@ -50,15 +56,21 @@ class ServoController:
             'servo_left_angles': self.servo_left_angles,
             'servo_right_angles': self.servo_right_angles
         }
-        config_path = os.path.join(os.path.dirname(__file__), 'config.json')
-        with open(config_path, 'w') as f:
-            json.dump(config, f, indent=4)
+        try:
+            config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+            with open(config_path, 'w') as f:
+                json.dump(config, f, indent=4)
+        except Exception as e:
+            print(f"Fehler beim Speichern der Konfiguration: {e}")
     
     def setup_servos(self):
         """Initialisiere die GPIO-Pins für die Servos"""
-        for pin in self.servo_pins:
-            GPIO.setup(pin, GPIO.OUT)
-            GPIO.output(pin, GPIO.LOW)
+        try:
+            for pin in self.servo_pins:
+                GPIO.setup(pin, GPIO.OUT)
+                GPIO.output(pin, GPIO.LOW)
+        except Exception as e:
+            print(f"Fehler beim Setup der GPIO-Pins: {e}")
     
     def set_servo_position(self, servo_id, position):
         """
@@ -70,21 +82,26 @@ class ServoController:
         """
         if servo_id < 0 or servo_id >= len(self.servo_pins):
             raise ValueError(f"Ungültige Servo-ID: {servo_id}")
-            
+        
         if position not in ['left', 'right']:
             raise ValueError(f"Ungültige Position: {position}")
+        
+        try:
+            pin = self.servo_pins[servo_id]
+            angle = self.servo_left_angles[servo_id] if position == 'left' else self.servo_right_angles[servo_id]
             
-        pin = self.servo_pins[servo_id]
-        angle = self.servo_left_angles[servo_id] if position == 'left' else self.servo_right_angles[servo_id]
-        
-        # Setze Servo-Position
-        pwm = GPIO.PWM(pin, 50)  # 50 Hz
-        pwm.start(angle)
-        time.sleep(0.5)
-        pwm.stop()
-        
-        # Aktualisiere Status
-        self.servo_states[servo_id]['position'] = position
+            # Setze Servo-Position
+            pwm = GPIO.PWM(pin, 50)  # 50 Hz
+            pwm.start(angle)
+            time.sleep(0.5)
+            pwm.stop()
+            
+            # Aktualisiere Status
+            self.servo_states[servo_id]['position'] = position
+            
+        except Exception as e:
+            print(f"Fehler beim Setzen der Servo-Position: {e}")
+            raise
     
     def get_servo_position(self, servo_id):
         """
@@ -98,9 +115,12 @@ class ServoController:
         """
         if servo_id < 0 or servo_id >= len(self.servo_pins):
             raise ValueError(f"Ungültige Servo-ID: {servo_id}")
-            
+        
         return self.servo_states[servo_id]['position']
     
     def cleanup(self):
         """Aufräumen der GPIO-Pins"""
-        GPIO.cleanup()
+        try:
+            GPIO.cleanup()
+        except Exception as e:
+            print(f"Fehler beim Cleanup: {e}")

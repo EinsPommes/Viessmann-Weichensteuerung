@@ -66,68 +66,74 @@ Sensor 2:
 4. Schließen Sie die Hall-Sensoren an 3.3V an, NICHT an 5V
 5. Prüfen Sie die Polarität aller Verbindungen vor dem Einschalten
 
-## Verkabelungsanleitung für MG90S Servos
+## Verkabelungsanleitung für Servos
 
-Der MG90S Servo hat drei Kabel:
-- **Braun/Schwarz**: GND (Ground/Masse)
-- **Rot**: VCC (5V Stromversorgung)
-- **Orange/Gelb**: Signal (PWM vom GPIO)
+### Servo-Anschlüsse
 
-### Anschluss an Raspberry Pi
+#### Grundlegende Verkabelung für jeden Servo
+- **Rot**: 5V Stromversorgung
+- **Braun/Schwarz**: Ground (GND)
+- **Orange/Gelb**: Signal (GPIO)
 
-#### Servo-Anschlüsse
-1. **GND (Braun/Schwarz)**
-   - An einen GND-Pin des Raspberry Pi (Pin 6, 9, 14, 20, 25, 30, 34 oder 39)
-   - Alle Servos können einen gemeinsamen GND-Pin nutzen
+#### Pin-Belegung für jeden Servo
 
-2. **VCC (Rot)**
-   - An 5V vom externen Netzteil
-   - NICHT direkt an 5V des Raspberry Pi anschließen!
-   - Alle Servos können gemeinsam am 5V-Netzteil angeschlossen werden
+| Servo | GPIO | Pin | Funktion |
+|-------|------|-----|-----------|
+| 1 | 17 | 11 | Signal |
+| 2 | 18 | 12 | Signal |
+| 3 | 27 | 13 | Signal |
+| 4 | 22 | 15 | Signal |
+| 5 | 23 | 16 | Signal |
+| 6 | 24 | 18 | Signal |
+| 7 | 25 | 22 | Signal |
+| 8 | 4  | 7  | Signal |
+| 9 | 5  | 29 | Signal |
+| 10| 6  | 31 | Signal |
+| 11| 13 | 33 | Signal |
+| 12| 19 | 35 | Signal |
+| 13| 26 | 37 | Signal |
+| 14| 16 | 36 | Signal |
+| 15| 20 | 38 | Signal |
+| 16| 21 | 40 | Signal |
 
-3. **Signal (Orange/Gelb)**
-   - An die entsprechenden GPIO-Pins laut Tabelle:
+### Stromversorgung (5V und GND)
+Verbinden Sie die roten und schwarzen Kabel wie folgt:
+- **5V**: Pin 2 oder 4
+- **GND**: Pin 6, 9, 14, 20, 25, 30, 34, oder 39
 
-| Weiche | GPIO-Pin | GPIO-Nr. (BCM) | Pin-Nr. (Board) |
-|--------|----------|----------------|-----------------|
-| 1      | GPIO17   | 17            | 11             |
-| 2      | GPIO18   | 18            | 12             |
-| 3      | GPIO27   | 27            | 13             |
-| 4      | GPIO22   | 22            | 15             |
-| 5      | GPIO23   | 23            | 16             |
-| 6      | GPIO24   | 24            | 18             |
-| 7      | GPIO25   | 25            | 22             |
-| 8      | GPIO4    | 4             | 7              |
-| 9      | GPIO5    | 5             | 29             |
-| 10     | GPIO6    | 6             | 31             |
-| 11     | GPIO13   | 13            | 33             |
-| 12     | GPIO19   | 19            | 35             |
+### Beispiel für Servo 1
+1. **Rot** → Pin 2 (5V)
+2. **Schwarz** → Pin 6 (GND)
+3. **Orange** → Pin 11 (GPIO 17)
 
-### Stromversorgung
+## Wichtige Hinweise
+1. Stellen Sie sicher, dass der Raspberry Pi ausgeschaltet ist, bevor Sie Verbindungen herstellen
+2. Überprüfen Sie die Polarität der Anschlüsse
+3. Verwenden Sie eine externe 5V-Stromversorgung für mehrere Servos
+4. Verbinden Sie die GND der externen Stromversorgung mit dem GND des Raspberry Pi
 
-**WICHTIG**: Die Servos müssen über ein externes 5V-Netzteil versorgt werden!
-
-1. **Netzteil-Anforderungen**:
-   - Spannung: 5V DC
-   - Strom: Mindestens 2A für 12 Servos
-   - Empfohlen: 5V 3A Netzteil für Reserven
-
-2. **Verkabelung Netzteil**:
-   - Netzteil GND → Gemeinsamer GND mit Raspberry Pi
-   - Netzteil 5V → Servos VCC (Rot)
-
-### Beispiel-Verkabelung für einen Servo
-
+## Raspberry Pi GPIO-Layout
 ```
-Raspberry Pi                MG90S Servo
--------------             --------------
-GPIO17 (Pin 11) ----→ Signal (Orange/Gelb)
-GND (Pin 6)     ----→ GND (Braun/Schwarz)
-
-Externes Netzteil         MG90S Servo
-----------------        --------------
-5V              ----→ VCC (Rot)
-GND             ----→ GND (Braun/Schwarz)
+3V3     (1)  (2)  5V
+GPIO2   (3)  (4)  5V
+GPIO3   (5)  (6)  GND
+GPIO4   (7)  (8)  GPIO14
+GND     (9)  (10) GPIO15
+GPIO17  (11) (12) GPIO18
+GPIO27  (13) (14) GND
+GPIO22  (15) (16) GPIO23
+3V3     (17) (18) GPIO24
+GPIO10  (19) (20) GND
+GPIO9   (21) (22) GPIO25
+GPIO11  (23) (24) GPIO8
+GND     (25) (26) GPIO7
+GPIO0   (27) (28) GPIO1
+GPIO5   (29) (30) GND
+GPIO6   (31) (32) GPIO12
+GPIO13  (33) (34) GND
+GPIO19  (35) (36) GPIO16
+GPIO26  (37) (38) GPIO20
+GND     (39) (40) GPIO21
 ```
 
 ## Sicherheitshinweise
