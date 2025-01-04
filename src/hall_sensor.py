@@ -1,71 +1,50 @@
-# import RPi.GPIO as GPIO
+import RPi.GPIO as GPIO
 import time
-from threading import Thread, Lock
 
-class HallSensorController:
-    def __init__(self, sensor_pins):
-        """
-        Initialisiert den Hall-Sensor-Controller
+class HallSensor:
+    def __init__(self):
+        # GPIO Setup
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setwarnings(False)
         
-        Args:
-            sensor_pins (list): Liste der GPIO-Pins für die Hall-Sensoren
-        """
-        self.sensor_pins = sensor_pins
-        self.sensor_states = [False] * len(sensor_pins)
-        self.state_lock = Lock()
-        # self._setup_gpio()
-        self._start_monitoring()
+        # Standard-Pins für Hall-Sensoren
+        self.sensor_pins = [26, 16, 20, 21]  # Beispiel-Pins, anpassen nach Bedarf
+        self.setup_sensors()
         
-    def _setup_gpio(self):
-        """Konfiguriert die GPIO-Pins für die Hall-Sensoren"""
-        # GPIO.setmode(GPIO.BCM)
-        # for pin in self.sensor_pins:
-        #     GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        pass
-            
-    def _monitor_sensors(self):
-        """Überwacht kontinuierlich die Hall-Sensoren"""
-        while True:
-            for i, pin in enumerate(self.sensor_pins):
-                # state = not GPIO.input(pin)  # Invertiert, da Hall-Sensor LOW bei Magnet
-                # Simuliere zufällige Sensorwerte für Test
-                state = True  # Alle Sensoren zeigen "korrekte Position"
-                with self.state_lock:
-                    self.sensor_states[i] = state
-            time.sleep(0.1)  # Kleine Pause zwischen den Messungen
-            
-    def _start_monitoring(self):
-        """Startet den Überwachungs-Thread"""
-        self.monitor_thread = Thread(target=self._monitor_sensors, daemon=True)
-        self.monitor_thread.start()
-        
-    def get_sensor_state(self, sensor_num):
-        """
-        Gibt den Status eines bestimmten Sensors zurück
-        
-        Args:
-            sensor_num (int): Nummer des Sensors (0-15)
-            
-        Returns:
-            bool: True wenn Magnet erkannt, False wenn nicht
-        """
-        if sensor_num < 0 or sensor_num >= len(self.sensor_pins):
-            raise ValueError(f"Ungültige Sensor-Nummer: {sensor_num}")
-            
-        with self.state_lock:
-            return self.sensor_states[sensor_num]
-            
+        # Status-Dictionary für alle Sensoren
+        self.sensor_states = {}
+        for pin in self.sensor_pins:
+            self.sensor_states[pin] = False
+    
+    def setup_sensors(self):
+        """Initialisiere alle Hall-Sensor-Pins"""
+        for pin in self.sensor_pins:
+            GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+    
+    def read_sensor(self, pin):
+        """Lese den Status eines einzelnen Sensors"""
+        if pin in self.sensor_pins:
+            # Hall-Sensor gibt LOW wenn Magnet erkannt wird
+            state = not GPIO.input(pin)
+            self.sensor_states[pin] = state
+            return state
+        return False
+    
+    def read_all_sensors(self):
+        """Lese den Status aller Sensoren"""
+        for pin in self.sensor_pins:
+            self.read_sensor(pin)
+        return self.sensor_states
+    
+    def get_sensor_state(self, pin):
+        """Gibt den letzten bekannten Status eines Sensors zurück"""
+        return self.sensor_states.get(pin, False)
+    
     def get_all_states(self):
-        """
-        Gibt den Status aller Sensoren zurück
-        
-        Returns:
-            list: Liste der Sensor-Zustände
-        """
-        with self.state_lock:
-            return self.sensor_states.copy()
-            
+        """Gibt den Status aller Sensoren zurück"""
+        return self.sensor_states
+    
     def cleanup(self):
-        """Aufräumen der GPIO-Ressourcen"""
-        # GPIO.cleanup()
+        """Aufräumen beim Beenden"""
+        # GPIO.cleanup() wird nicht hier aufgerufen, da es die Servo-Pins beeinflussen würde
         pass

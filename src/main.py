@@ -51,7 +51,7 @@ def main():
         
         # Starte GUI
         root = tk.Tk()
-        app = GUI(root, servo_controller, automation)
+        app = GUI(root, servo_controller, hall_sensor, automation)
         root.protocol("WM_DELETE_WINDOW", lambda: cleanup(root, servo_controller))
         root.mainloop()
     except Exception as e:
