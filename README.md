@@ -84,6 +84,39 @@ Die Servo-Positionen können in der `config.json` angepasst werden:
 - `servo_left_angles`: PWM-Werte für die linke Position (~45°)
 - `servo_right_angles`: PWM-Werte für die rechte Position (~135°)
 
+## Updates
+
+### Raspberry Pi aktualisieren
+
+1. Terminal öffnen
+2. In das Projektverzeichnis wechseln:
+```bash
+cd ~/Viessmann-Weichensteuerung
+```
+
+3. Neue Version von GitHub holen:
+```bash
+git pull origin main
+```
+
+4. Programm neu starten:
+```bash
+python src/main.py
+```
+
+### Fehlerbehebung
+
+Falls es Konflikte gibt:
+1. Lokale Änderungen verwerfen:
+```bash
+git reset --hard origin/main
+```
+
+2. Neu von GitHub laden:
+```bash
+git pull origin main
+```
+
 ## Bedienung
 
 1. **Manuelle Steuerung**
