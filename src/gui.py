@@ -3,7 +3,7 @@ from tkinter import ttk
 import json
 from track_layout import TrackLayout
 
-class WeichenGUI:
+class GUI:
     def __init__(self, servo_controller, automation_controller):
         self.servo_controller = servo_controller
         # self.hall_controller = hall_controller
