@@ -1,11 +1,13 @@
 #!/bin/bash
 
-# Warte auf X-Server
+# Warte auf Netzwerk
 sleep 10
 
-# Setze DISPLAY Variable
-export DISPLAY=:0
+# Starte die GUI
+python3 /home/mika/Viessmann-Weichensteuerung/src/main.py &
 
-# Starte das Programm
-cd /home/mika/Viessmann-Weichensteuerung/src
-python3 main.py
+# Starte den Webserver
+python3 /home/mika/Viessmann-Weichensteuerung/src/web_server.py &
+
+# Warte auf beide Prozesse
+wait

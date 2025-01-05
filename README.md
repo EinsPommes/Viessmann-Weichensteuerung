@@ -10,6 +10,7 @@ Eine GUI-basierte Steuerung für Servomotoren zur Kontrolle von Parkplatz-Barrie
 - Automatisierungsmöglichkeiten
 - Kalibrierungsfunktionen
 - Optimiert für 10-Zoll-Display
+- Webbasierte Steuerung über Browser
 
 ## Installation
 
@@ -45,7 +46,8 @@ sudo systemctl start weichensteuerung.service
 
 ### Hauptfunktionen
 
-- **Steuerung**: Direktes Steuern der Servos/Barrieren
+- **GUI**: Lokale Steuerung über Tkinter-Interface
+- **Web-Interface**: Steuerung über Browser (http://[raspberry-ip]:5000)
 - **Gleiskarte**: Visuelle Darstellung der Barrieren-Positionen
 - **Kalibrierung**: Anpassen der Servo-Positionen
 - **Automation**: Automatische Steuerungssequenzen

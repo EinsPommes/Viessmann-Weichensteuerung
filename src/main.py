@@ -253,35 +253,70 @@ class WeichensteuerungGUI:
                   command=self.stop_automation).grid(row=0, column=1, padx=5, pady=5)
     
     def create_info_tab(self, parent):
-        # Info Frame
-        info_frame = ttk.LabelFrame(parent, text="System Information", padding="10")
-        info_frame.grid(row=0, column=0, padx=10, pady=5, sticky=(tk.W, tk.E))
-        
-        # System Status
-        status_frame = ttk.Frame(info_frame)
-        status_frame.grid(row=0, column=0, padx=5, pady=5, sticky=(tk.W, tk.E))
-        
-        ttk.Label(status_frame, text="System Status:", 
-                 font=('TkDefaultFont', 10, 'bold')).grid(row=0, column=0, padx=5)
-        
-        status_label = ttk.Label(status_frame, 
-                               text=self.system_status,
-                               font=('TkDefaultFont', 10))
-        status_label.grid(row=0, column=1, padx=5)
-        
+        """Info-Tab erstellen"""
+        info_frame = ttk.Frame(parent, padding="5")
+        info_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+        # Info-Text
+        info_text = """Weichensteuerung v1.0
+Entwickelt von EinsPommes
+
+Weboberfläche:"""
+        ttk.Label(info_frame, text=info_text, justify=tk.LEFT).grid(row=0, column=0, pady=10, sticky=tk.W)
+
+        # IP-Adressen abrufen und anzeigen
+        import socket
+        def get_ip_addresses():
+            try:
+                hostname = socket.gethostname()
+                return [f"http://{hostname}:5000"]
+            except Exception as e:
+                return [f"Fehler beim Abrufen der IP: {str(e)}"]
+
+        # IP-Adresse anzeigen
+        for ip in get_ip_addresses():
+            ttk.Label(info_frame, text=ip, font=('TkDefaultFont', 10), 
+                     foreground='blue').grid(row=1, column=0, pady=2, sticky=tk.W)
+
+        # Steuerungs-Info
+        control_info = """
+Steuerung der Servos:
+- Links/Rechts Buttons zum Steuern
+- Status wird farblich angezeigt
+- Kalibrierung über Settings möglich
+
+Weboberfläche:
+- Zugriff über Browser mit obiger URL
+- Gleiche Funktionen wie GUI
+- Automatische Aktualisierung"""
+        ttk.Label(info_frame, text=control_info, justify=tk.LEFT).grid(
+            row=2, column=0, pady=(20,0), sticky=tk.W)
+
         # Credits
         credits_frame = ttk.LabelFrame(parent, text="Credits", padding="10")
         credits_frame.grid(row=1, column=0, padx=10, pady=5, sticky=(tk.W, tk.E))
         
-        ttk.Label(credits_frame, 
-                 text="Entwickelt von EinsPommesx\nWebsite: Chill-zone.xyz",
-                 font=('TkDefaultFont', 10)).grid(row=0, column=0, padx=5, pady=5)
+        credits_text = """Entwickelt von: EinsPommes
+Website: Chill-zone.xyz
+
+Version: 1.0
+ 2025 EinsPommes"""
         
+        ttk.Label(credits_frame, text=credits_text, 
+                 justify=tk.LEFT).grid(row=0, column=0, padx=5, pady=5)
+
+        # Button Frame
+        button_frame = ttk.Frame(parent)
+        button_frame.grid(row=2, column=0, pady=10)
+
+        # Update Button
+        ttk.Button(button_frame, text="Update", 
+                  command=self.update_software).grid(row=0, column=0, padx=5)
+
         # Beenden Button
-        ttk.Button(parent, text="Beenden", 
-                  command=self.quit_application,
-                  width=20).grid(row=2, column=0, pady=20)
-    
+        ttk.Button(button_frame, text="Beenden", 
+                  command=self.quit_application).grid(row=0, column=1, padx=5)
+
     def on_servo_selected(self, event):
         if not self.selected_servo.get():
             return
@@ -364,6 +399,37 @@ class WeichensteuerungGUI:
             pass
         self.root.quit()
         
+    def update_software(self):
+        """Software über Git aktualisieren"""
+        import subprocess
+        import sys
+        import os
+
+        try:
+            # Aktuelles Verzeichnis speichern
+            current_dir = os.getcwd()
+            
+            # In das Projektverzeichnis wechseln
+            os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            
+            # Git-Befehle ausführen
+            subprocess.check_call(['git', 'fetch', 'origin'])
+            subprocess.check_call(['git', 'reset', '--hard', 'origin/main'])
+            
+            # Zurück zum ursprünglichen Verzeichnis
+            os.chdir(current_dir)
+            
+            # Erfolgsmeldung
+            messagebox.showinfo("Update", "Update erfolgreich! Bitte starten Sie das Programm neu.")
+            
+            # Programm beenden
+            self.quit_application()
+            
+        except subprocess.CalledProcessError as e:
+            messagebox.showerror("Fehler", f"Update fehlgeschlagen: {str(e)}")
+        except Exception as e:
+            messagebox.showerror("Fehler", f"Unerwarteter Fehler: {str(e)}")
+
 def main():
     try:
         root = tk.Tk()

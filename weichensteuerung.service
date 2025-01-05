@@ -1,15 +1,15 @@
 [Unit]
-Description=Weichensteuerung GUI
-After=graphical.target
+Description=Weichensteuerung Service
+After=network.target
 
 [Service]
 Type=simple
-User=mika
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=/home/mika/.Xauthority
+User=mika
 ExecStart=/home/mika/Viessmann-Weichensteuerung/start_weichensteuerung.sh
 Restart=always
 RestartSec=10
 
 [Install]
-WantedBy=graphical.target
+WantedBy=multi-user.target
