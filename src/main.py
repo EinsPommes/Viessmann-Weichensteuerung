@@ -1,37 +1,62 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import tkinter as tk
+from tkinter import ttk
+from tkinter import messagebox
 from servo_controller import ServoController
-from hall_sensor import HallSensor
 from automation_controller import AutomationController
-from gui import GUI
-from track_map import TrackMap
+import logging
 import json
 import os
-import tkinter as tk
 import sys
-import logging
 from logging.handlers import RotatingFileHandler
+import subprocess
+import shutil
+from datetime import datetime
 
-# Konfiguration laden
-config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config.json')
-with open(config_path, 'r') as f:
-    CONFIG = json.load(f)
+try:
+    # Konfiguration laden
+    config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config.json')
+    if not os.path.exists(config_path):
+        # Standard-Konfiguration wenn keine Datei existiert
+        CONFIG = {
+            "display": {
+                "width": 1024,
+                "height": 600,
+                "scaling": 1.4
+            },
+            "logging": {
+                "level": "INFO",
+                "backup_count": 5,
+                "max_size": 1048576
+            }
+        }
+    else:
+        with open(config_path, 'r') as f:
+            CONFIG = json.load(f)
 
-# Logging konfigurieren
-log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'logs')
-os.makedirs(log_dir, exist_ok=True)
+    # Logging konfigurieren
+    log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'logs')
+    os.makedirs(log_dir, exist_ok=True)
 
-# Rotating File Handler einrichten
-log_file = os.path.join(log_dir, 'weichensteuerung.log')
-handler = RotatingFileHandler(
-    log_file,
-    maxBytes=CONFIG['logging']['max_size'],
-    backupCount=CONFIG['logging']['backup_count']
-)
-handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    # Rotating File Handler einrichten
+    log_file = os.path.join(log_dir, 'weichensteuerung.log')
+    handler = RotatingFileHandler(
+        log_file,
+        maxBytes=CONFIG['logging']['max_size'],
+        backupCount=CONFIG['logging']['backup_count']
+    )
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 
-# Logger konfigurieren
-logger = logging.getLogger('weichensteuerung')
-logger.setLevel(CONFIG['logging']['level'])
-logger.addHandler(handler)
+    # Logger konfigurieren
+    logger = logging.getLogger('weichensteuerung')
+    logger.setLevel(CONFIG['logging']['level'])
+    logger.addHandler(handler)
+
+except Exception as e:
+    print(f"Fehler beim Initialisieren der Konfiguration: {str(e)}")
+    sys.exit(1)
 
 class WeichensteuerungGUI:
     def __init__(self, root):
@@ -62,7 +87,6 @@ class WeichensteuerungGUI:
         try:
             self.servo_controller = ServoController()
             self.automation_controller = AutomationController(self.servo_controller)
-            self.hall_sensor = HallSensor()
             self.system_status = "Ready"
         except Exception as e:
             self.system_status = f"Error: {str(e)}"
