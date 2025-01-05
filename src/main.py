@@ -6,6 +6,7 @@ from tkinter import ttk
 from tkinter import messagebox
 from servo_controller import ServoController
 from automation_controller import AutomationController
+from track_map import TrackMap
 import logging
 import json
 import os
@@ -69,19 +70,28 @@ class WeichensteuerungGUI:
         
         # Skalierung aus Konfiguration
         self.root.tk.call('tk', 'scaling', CONFIG['display']['scaling'])
-        
-        # Mittlere Skalierung
-        #self.root.tk.call('tk', 'scaling', 1.4)
-        
+
         # Style konfigurieren
         style = ttk.Style()
-        style.configure('Servo.TLabelframe', padding=3)
-        style.configure('Servo.TButton', padding=2)
-        style.configure('Servo.TLabel', font=('TkDefaultFont', 10))
+        style.configure('TNotebook.Tab', padding=(10, 5))
         
-        # Hauptframe mit mittlerem Padding
-        main_frame = ttk.Frame(root, padding="5")
-        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        # Notebook (Tab-Container) erstellen
+        self.notebook = ttk.Notebook(root)
+        self.notebook.grid(row=0, column=0, sticky=(tk.N, tk.S, tk.E, tk.W))
+        
+        # Tabs erstellen
+        self.control_frame = ttk.Frame(self.notebook)
+        self.track_frame = ttk.Frame(self.notebook)
+        self.calibration_frame = ttk.Frame(self.notebook)
+        self.automation_frame = ttk.Frame(self.notebook)
+        self.info_frame = ttk.Frame(self.notebook)
+        
+        # Tabs zum Notebook hinzufügen
+        self.notebook.add(self.control_frame, text='Steuerung')
+        self.notebook.add(self.track_frame, text='Gleiskarte')
+        self.notebook.add(self.calibration_frame, text='Kalibrierung')
+        self.notebook.add(self.automation_frame, text='Automation')
+        self.notebook.add(self.info_frame, text='Info & Settings')
         
         # Controller initialisieren
         try:
@@ -90,47 +100,19 @@ class WeichensteuerungGUI:
             self.system_status = "Ready"
         except Exception as e:
             self.system_status = f"Error: {str(e)}"
-            messagebox.showerror("Fehler", f"Fehler beim Starten: {str(e)}")
-            raise
-        
-        # Status-Dictionary für Servos
-        self.servo_status = {}
-        for i in range(16):
-            self.servo_status[i] = {
-                'frame': None,
-                'label': None,
-                'position': 'links'
-            }
-        
+            logger.error(f"Fehler beim Initialisieren der Controller: {str(e)}")
+            
         # Tabs erstellen
-        self.tab_control = ttk.Notebook(main_frame)
-        self.tab_control.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.create_control_tab(self.control_frame)
+        self.create_track_tab(self.track_frame)
+        self.create_calibration_tab(self.calibration_frame)
+        self.create_automation_tab(self.automation_frame)
+        self.create_info_tab(self.info_frame)
         
-        # Steuerungs-Tab
-        control_tab = ttk.Frame(self.tab_control)
-        self.tab_control.add(control_tab, text="Steuerung")
-        self.create_control_tab(control_tab)
-        
-        # Gleiskarte-Tab
-        map_tab = ttk.Frame(self.tab_control)
-        self.tab_control.add(map_tab, text="Gleiskarte")
-        self.create_map_tab(map_tab)
-        
-        # Kalibrierungs-Tab
-        config_tab = ttk.Frame(self.tab_control)
-        self.tab_control.add(config_tab, text="Kalibrierung")
-        self.create_config_tab(config_tab)
-        
-        # Automation-Tab
-        automation_tab = ttk.Frame(self.tab_control)
-        self.tab_control.add(automation_tab, text="Automation")
-        self.create_automation_tab(automation_tab)
-        
-        # Info-Tab
-        info_tab = ttk.Frame(self.tab_control)
-        self.tab_control.add(info_tab, text="Info & Settings")
-        self.create_info_tab(info_tab)
-    
+        # Grid-Konfiguration
+        root.grid_rowconfigure(0, weight=1)
+        root.grid_columnconfigure(0, weight=1)
+
     def create_control_tab(self, parent):
         # Frame für Servo-Grid
         control_frame = ttk.Frame(parent, padding="3")
@@ -169,12 +151,21 @@ class WeichensteuerungGUI:
         for i in range(4):
             control_frame.columnconfigure(i, weight=1)
             control_frame.rowconfigure(i, weight=1)
-    
-    def create_map_tab(self, parent):
-        # Gleiskarte erstellen
-        self.track_map = TrackMap(parent)
+
+    def create_track_tab(self, parent):
+        """Gleiskarte-Tab erstellen"""
+        # Frame für die Karte
+        map_frame = ttk.Frame(parent, padding="5")
+        map_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
-    def create_config_tab(self, parent):
+        # Gleiskarte erstellen
+        self.track_map = TrackMap(map_frame)
+        
+        # Grid-Konfiguration
+        parent.grid_rowconfigure(0, weight=1)
+        parent.grid_columnconfigure(0, weight=1)
+
+    def create_calibration_tab(self, parent):
         # Hauptframe mit Padding
         config_main = ttk.Frame(parent, padding="5")
         config_main.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
@@ -220,7 +211,7 @@ class WeichensteuerungGUI:
                   command=lambda: self.test_position('left')).grid(row=0, column=0, padx=5, pady=5)
         ttk.Button(test_frame, text="Test Position B", width=15,
                   command=lambda: self.test_position('right')).grid(row=0, column=1, padx=5, pady=5)
-    
+
     def create_automation_tab(self, parent):
         # Hauptframe mit Padding
         auto_main = ttk.Frame(parent, padding="5")
@@ -264,7 +255,7 @@ class WeichensteuerungGUI:
                   command=self.start_automation).grid(row=0, column=0, padx=5, pady=5)
         ttk.Button(control_frame, text="Stop", width=20,
                   command=self.stop_automation).grid(row=0, column=1, padx=5, pady=5)
-    
+
     def create_info_tab(self, parent):
         """Info-Tab erstellen"""
         info_frame = ttk.Frame(parent, padding="5")
