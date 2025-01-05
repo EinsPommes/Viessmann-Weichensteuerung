@@ -66,7 +66,13 @@ class WeichensteuerungGUI:
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         # Status-Dictionary für Servos
-        self.servo_labels = {}
+        self.servo_status = {}
+        for i in range(16):
+            self.servo_status[i] = {
+                'frame': None,
+                'label': None,
+                'position': 'links'
+            }
         
         # Tabs erstellen
         self.tab_control = ttk.Notebook(main_frame)
@@ -101,8 +107,9 @@ class WeichensteuerungGUI:
             status_label = ttk.Label(servo_frame, text="Position: Links")
             status_label.grid(row=0, column=0, columnspan=2)
             
-            # Speichere Label für Updates
-            self.servo_labels[i] = status_label
+            # Speichere Frame und Label
+            self.servo_status[i]['frame'] = servo_frame
+            self.servo_status[i]['label'] = status_label
             
             # Buttons
             ttk.Button(servo_frame, text="Links", 
@@ -239,8 +246,10 @@ class WeichensteuerungGUI:
         try:
             self.servo_controller.set_servo_position(servo_id, position)
             # Aktualisiere Status-Label
-            if servo_id in self.servo_labels:
-                self.servo_labels[servo_id].configure(text=f"Position: {'Links' if position == 'left' else 'Rechts'}")
+            label = self.servo_status[servo_id]['label']
+            if label:
+                label.configure(text=f"Position: {'Links' if position == 'left' else 'Rechts'}")
+            self.servo_status[servo_id]['position'] = position
         except Exception as e:
             messagebox.showerror("Fehler", f"Fehler beim Setzen der Position: {str(e)}")
     
