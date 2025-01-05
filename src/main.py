@@ -2,6 +2,7 @@ from servo_controller import ServoController
 from hall_sensor import HallSensor
 from automation_controller import AutomationController
 from gui import GUI
+from track_map import TrackMap
 import json
 import os
 import tkinter as tk
@@ -52,18 +53,30 @@ class WeichensteuerungGUI:
         self.root = root
         self.root.title("Weichensteuerung")
         
+        # Fenstergröße für 10 Zoll Monitor (1024x600 typische Auflösung)
+        self.root.geometry("1024x600")
+        
+        # Skalierung für hochauflösende Displays
+        self.root.tk.call('tk', 'scaling', 1.5)
+        
         # Controller initialisieren
         try:
             self.servo_controller = ServoController()
             self.automation_controller = AutomationController(self.servo_controller)
             self.hall_sensor = HallSensor()
+            self.system_status = "Ready"
         except Exception as e:
+            self.system_status = f"Error: {str(e)}"
             messagebox.showerror("Fehler", f"Fehler beim Starten: {str(e)}")
             raise
         
-        # Hauptframe
-        main_frame = ttk.Frame(root, padding="10")
+        # Hauptframe mit Padding für bessere Lesbarkeit
+        main_frame = ttk.Frame(root, padding="5")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # Grid-Konfiguration für bessere Skalierung
+        root.grid_rowconfigure(0, weight=1)
+        root.grid_columnconfigure(0, weight=1)
         
         # Status-Dictionary für Servos
         self.servo_status = {}
@@ -83,6 +96,11 @@ class WeichensteuerungGUI:
         self.tab_control.add(control_tab, text="Steuerung")
         self.create_control_tab(control_tab)
         
+        # Gleiskarte-Tab
+        map_tab = ttk.Frame(self.tab_control)
+        self.tab_control.add(map_tab, text="Gleiskarte")
+        self.create_map_tab(map_tab)
+        
         # Kalibrierungs-Tab
         config_tab = ttk.Frame(self.tab_control)
         self.tab_control.add(config_tab, text="Kalibrierung")
@@ -92,80 +110,108 @@ class WeichensteuerungGUI:
         automation_tab = ttk.Frame(self.tab_control)
         self.tab_control.add(automation_tab, text="Automation")
         self.create_automation_tab(automation_tab)
+        
+        # Info-Tab
+        info_tab = ttk.Frame(self.tab_control)
+        self.tab_control.add(info_tab, text="Info & Settings")
+        self.create_info_tab(info_tab)
     
     def create_control_tab(self, parent):
-        # Grid für Servo-Steuerung
+        # Frame für Servo-Grid
+        control_frame = ttk.Frame(parent)
+        control_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # Grid für Servo-Steuerung (4x4 Grid)
         for i in range(16):
             row = i // 4
             col = i % 4
             
-            # Frame für jeden Servo
-            servo_frame = ttk.LabelFrame(parent, text=f"Servo {i+1}", padding="5")
-            servo_frame.grid(row=row, column=col, padx=5, pady=5, sticky=(tk.W, tk.E, tk.N, tk.S))
+            # Frame für jeden Servo mit angepasster Größe
+            servo_frame = ttk.LabelFrame(control_frame, text=f"Servo {i+1}", padding="3")
+            servo_frame.grid(row=row, column=col, padx=3, pady=3, sticky=(tk.W, tk.E, tk.N, tk.S))
             
-            # Status-Label
-            status_label = ttk.Label(servo_frame, text="Position: Links")
-            status_label.grid(row=0, column=0, columnspan=2)
+            # Grid-Konfiguration für gleichmäßige Größe
+            control_frame.grid_rowconfigure(row, weight=1)
+            control_frame.grid_columnconfigure(col, weight=1)
+            
+            # Status-Label mit größerer Schrift
+            status_label = ttk.Label(servo_frame, text="Position: Links", font=('TkDefaultFont', 9))
+            status_label.grid(row=0, column=0, columnspan=2, pady=2)
+            
+            # Buttons mit angepasster Größe
+            btn_left = ttk.Button(servo_frame, text="Links", width=8,
+                                command=lambda x=i: self.set_servo_position(x, 'left'))
+            btn_left.grid(row=1, column=0, padx=2, pady=2)
+            
+            btn_right = ttk.Button(servo_frame, text="Rechts", width=8,
+                                 command=lambda x=i: self.set_servo_position(x, 'right'))
+            btn_right.grid(row=1, column=1, padx=2, pady=2)
             
             # Speichere Frame und Label
             self.servo_status[i]['frame'] = servo_frame
             self.servo_status[i]['label'] = status_label
-            
-            # Buttons
-            ttk.Button(servo_frame, text="Links", 
-                      command=lambda x=i: self.set_servo_position(x, 'left')).grid(row=1, column=0)
-            ttk.Button(servo_frame, text="Rechts", 
-                      command=lambda x=i: self.set_servo_position(x, 'right')).grid(row=1, column=1)
     
+    def create_map_tab(self, parent):
+        # Gleiskarte erstellen
+        self.track_map = TrackMap(parent)
+        
     def create_config_tab(self, parent):
-        # Servo-Auswahl
-        ttk.Label(parent, text="Servo auswählen:").grid(row=0, column=0, padx=5, pady=5)
+        # Hauptframe mit Padding
+        config_main = ttk.Frame(parent, padding="5")
+        config_main.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # Servo-Auswahl mit größerer Schrift
+        ttk.Label(config_main, text="Servo auswählen:", font=('TkDefaultFont', 10)).grid(row=0, column=0, padx=5, pady=5)
         self.selected_servo = tk.StringVar()
-        servo_select = ttk.Combobox(parent, textvariable=self.selected_servo)
+        servo_select = ttk.Combobox(config_main, textvariable=self.selected_servo, font=('TkDefaultFont', 10), width=15)
         servo_select['values'] = [f"Servo {i+1}" for i in range(16)]
         servo_select.grid(row=0, column=1, padx=5, pady=5)
         servo_select.bind('<<ComboboxSelected>>', self.on_servo_selected)
         
         # Konfigurationsframe
-        config_frame = ttk.LabelFrame(parent, text="Servo-Konfiguration", padding="10")
+        config_frame = ttk.LabelFrame(config_main, text="Servo-Konfiguration", padding="10")
         config_frame.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky=(tk.W, tk.E))
         
         # Position A (Links)
-        ttk.Label(config_frame, text="Position A (Links):").grid(row=0, column=0, padx=5, pady=5)
+        ttk.Label(config_frame, text="Position A (Links):", font=('TkDefaultFont', 10)).grid(row=0, column=0, padx=5, pady=5)
         self.left_angle = tk.StringVar()
-        self.left_scale = ttk.Scale(config_frame, from_=2.5, to=12.5, orient=tk.HORIZONTAL, 
-                                  variable=self.left_angle, command=self.update_left_angle)
+        self.left_scale = ttk.Scale(config_frame, from_=2.5, to=12.5, orient=tk.HORIZONTAL,
+                                  variable=self.left_angle, command=self.update_left_angle, length=200)
         self.left_scale.grid(row=0, column=1, padx=5, pady=5)
         
         # Position B (Rechts)
-        ttk.Label(config_frame, text="Position B (Rechts):").grid(row=1, column=0, padx=5, pady=5)
+        ttk.Label(config_frame, text="Position B (Rechts):", font=('TkDefaultFont', 10)).grid(row=1, column=0, padx=5, pady=5)
         self.right_angle = tk.StringVar()
-        self.right_scale = ttk.Scale(config_frame, from_=2.5, to=12.5, orient=tk.HORIZONTAL, 
-                                   variable=self.right_angle, command=self.update_right_angle)
+        self.right_scale = ttk.Scale(config_frame, from_=2.5, to=12.5, orient=tk.HORIZONTAL,
+                                   variable=self.right_angle, command=self.update_right_angle, length=200)
         self.right_scale.grid(row=1, column=1, padx=5, pady=5)
         
         # Geschwindigkeit
-        ttk.Label(config_frame, text="Geschwindigkeit:").grid(row=2, column=0, padx=5, pady=5)
+        ttk.Label(config_frame, text="Geschwindigkeit:", font=('TkDefaultFont', 10)).grid(row=2, column=0, padx=5, pady=5)
         self.speed = tk.StringVar()
-        self.speed_scale = ttk.Scale(config_frame, from_=0.1, to=1.0, orient=tk.HORIZONTAL, 
-                                   variable=self.speed, command=self.update_speed)
+        self.speed_scale = ttk.Scale(config_frame, from_=0.1, to=1.0, orient=tk.HORIZONTAL,
+                                   variable=self.speed, command=self.update_speed, length=200)
         self.speed_scale.grid(row=2, column=1, padx=5, pady=5)
         
         # Test-Buttons
-        test_frame = ttk.LabelFrame(parent, text="Test", padding="10")
+        test_frame = ttk.LabelFrame(config_main, text="Test", padding="5")
         test_frame.grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky=(tk.W, tk.E))
         
-        ttk.Button(test_frame, text="Test Position A", 
+        ttk.Button(test_frame, text="Test Position A", width=15,
                   command=lambda: self.test_position('left')).grid(row=0, column=0, padx=5, pady=5)
-        ttk.Button(test_frame, text="Test Position B", 
+        ttk.Button(test_frame, text="Test Position B", width=15,
                   command=lambda: self.test_position('right')).grid(row=0, column=1, padx=5, pady=5)
     
     def create_automation_tab(self, parent):
+        # Hauptframe mit Padding
+        auto_main = ttk.Frame(parent, padding="5")
+        auto_main.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
         # Pattern-Auswahl
-        pattern_frame = ttk.LabelFrame(parent, text="Automatik-Muster", padding="10")
+        pattern_frame = ttk.LabelFrame(auto_main, text="Automatik-Muster", padding="10")
         pattern_frame.grid(row=0, column=0, padx=5, pady=5, sticky=(tk.W, tk.E))
         
-        # Muster-Liste
+        # Muster-Liste mit größerer Schrift
         patterns = [
             "Muster 1: Links → Rechts",
             "Muster 2: Rechts → Links",
@@ -176,7 +222,8 @@ class WeichensteuerungGUI:
         ]
         
         self.selected_pattern = tk.StringVar()
-        pattern_list = ttk.Combobox(pattern_frame, textvariable=self.selected_pattern)
+        pattern_list = ttk.Combobox(pattern_frame, textvariable=self.selected_pattern,
+                                  font=('TkDefaultFont', 10), width=30)
         pattern_list['values'] = patterns
         pattern_list.set(patterns[0])
         pattern_list.grid(row=0, column=0, padx=5, pady=5)
@@ -187,17 +234,47 @@ class WeichensteuerungGUI:
         
         self.automation_speed = tk.DoubleVar(value=1.0)
         speed_scale = ttk.Scale(speed_frame, from_=0.1, to=2.0, orient=tk.HORIZONTAL,
-                              variable=self.automation_speed)
+                              variable=self.automation_speed, length=300)
         speed_scale.grid(row=0, column=0, padx=5, pady=5, sticky=(tk.W, tk.E))
         
-        # Start/Stop Buttons
-        control_frame = ttk.Frame(parent)
+        # Start/Stop Buttons mit größerer Breite
+        control_frame = ttk.Frame(auto_main)
         control_frame.grid(row=1, column=0, padx=5, pady=5, sticky=(tk.W, tk.E))
         
-        ttk.Button(control_frame, text="Start", 
+        ttk.Button(control_frame, text="Start", width=20,
                   command=self.start_automation).grid(row=0, column=0, padx=5, pady=5)
-        ttk.Button(control_frame, text="Stop", 
+        ttk.Button(control_frame, text="Stop", width=20,
                   command=self.stop_automation).grid(row=0, column=1, padx=5, pady=5)
+    
+    def create_info_tab(self, parent):
+        # Info Frame
+        info_frame = ttk.LabelFrame(parent, text="System Information", padding="10")
+        info_frame.grid(row=0, column=0, padx=10, pady=5, sticky=(tk.W, tk.E))
+        
+        # System Status
+        status_frame = ttk.Frame(info_frame)
+        status_frame.grid(row=0, column=0, padx=5, pady=5, sticky=(tk.W, tk.E))
+        
+        ttk.Label(status_frame, text="System Status:", 
+                 font=('TkDefaultFont', 10, 'bold')).grid(row=0, column=0, padx=5)
+        
+        status_label = ttk.Label(status_frame, 
+                               text=self.system_status,
+                               font=('TkDefaultFont', 10))
+        status_label.grid(row=0, column=1, padx=5)
+        
+        # Credits
+        credits_frame = ttk.LabelFrame(parent, text="Credits", padding="10")
+        credits_frame.grid(row=1, column=0, padx=10, pady=5, sticky=(tk.W, tk.E))
+        
+        ttk.Label(credits_frame, 
+                 text="Entwickelt von EinsPommesx\nWebsite: Chill-zone.xyz",
+                 font=('TkDefaultFont', 10)).grid(row=0, column=0, padx=5, pady=5)
+        
+        # Beenden Button
+        ttk.Button(parent, text="Beenden", 
+                  command=self.quit_application,
+                  width=20).grid(row=2, column=0, pady=20)
     
     def on_servo_selected(self, event):
         if not self.selected_servo.get():
@@ -250,9 +327,13 @@ class WeichensteuerungGUI:
             if label:
                 label.configure(text=f"Position: {'Links' if position == 'left' else 'Rechts'}")
             self.servo_status[servo_id]['position'] = position
+            
+            # Aktualisiere Gleiskarte
+            self.track_map.update_switch(servo_id + 1, position)
+            
         except Exception as e:
             messagebox.showerror("Fehler", f"Fehler beim Setzen der Position: {str(e)}")
-    
+            
     def start_automation(self):
         try:
             pattern = self.selected_pattern.get().split(':')[0].strip()
@@ -268,7 +349,15 @@ class WeichensteuerungGUI:
             self.automation_controller.stop()
         except Exception as e:
             messagebox.showerror("Fehler", f"Fehler beim Stoppen der Automation: {str(e)}")
-
+            
+    def quit_application(self):
+        """Beendet die Anwendung sauber"""
+        try:
+            self.servo_controller.cleanup()
+        except:
+            pass
+        self.root.quit()
+        
 def main():
     try:
         root = tk.Tk()

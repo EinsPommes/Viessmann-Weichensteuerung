@@ -10,7 +10,8 @@ class ServoController:
         GPIO.setwarnings(False)
         
         # Standard-Konfiguration für MG90S Servos
-        self.servo_pins = [17, 18, 27, 22, 23, 24, 25, 4, 5, 6, 13, 19, 26, 16, 20, 21]  # GPIO-Pins für 16 Servos
+        # Angepasste Pin-Liste: GPIO 15 ist jetzt der erste Pin
+        self.servo_pins = [15, 18, 27, 22, 23, 24, 25, 4, 5, 6, 13, 19, 26, 16, 20, 21]
         
         # Servo-Konfiguration mit Geschwindigkeit
         self.servo_config = {}
@@ -18,7 +19,7 @@ class ServoController:
             self.servo_config[i] = {
                 'left_angle': 2.5,    # Position A (0°)
                 'right_angle': 12.5,  # Position B (180°)
-                'speed': 0.5          # Geschwindigkeit (0.1 = langsam, 1.0 = schnell)
+                'speed': 0.5          # Geschwindigkeit
             }
         
         # Lade Servo-Konfiguration wenn vorhanden
@@ -96,12 +97,14 @@ class ServoController:
         
         Args:
             servo_id (int): ID des Servos (0-15)
-            
-        Returns:
-            dict: Konfiguration des Servos
         """
         if servo_id not in self.servo_config:
-            raise ValueError(f"Ungültige Servo-ID: {servo_id}")
+            # Erstelle Standardkonfiguration falls nicht vorhanden
+            self.servo_config[servo_id] = {
+                'left_angle': 2.5,
+                'right_angle': 12.5,
+                'speed': 0.5
+            }
         return self.servo_config[servo_id]
     
     def set_servo_position(self, servo_id, position):
@@ -112,9 +115,9 @@ class ServoController:
             servo_id (int): ID des Servos (0-15)
             position (str): 'left' oder 'right'
         """
-        if servo_id not in self.servo_config:
+        if servo_id >= len(self.servo_pins):
             raise ValueError(f"Ungültige Servo-ID: {servo_id}")
-        
+            
         if position not in ['left', 'right']:
             raise ValueError(f"Ungültige Position: {position}")
         
@@ -162,7 +165,7 @@ class ServoController:
         Returns:
             str: 'left' oder 'right'
         """
-        if servo_id < 0 or servo_id >= len(self.servo_pins):
+        if servo_id >= len(self.servo_pins):
             raise ValueError(f"Ungültige Servo-ID: {servo_id}")
         
         return self.servo_states[servo_id]['position']
