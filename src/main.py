@@ -65,6 +65,9 @@ class WeichensteuerungGUI:
         main_frame = ttk.Frame(root, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
+        # Status-Dictionary für Servos
+        self.servo_labels = {}
+        
         # Tabs erstellen
         self.tab_control = ttk.Notebook(main_frame)
         self.tab_control.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
@@ -79,24 +82,10 @@ class WeichensteuerungGUI:
         self.tab_control.add(config_tab, text="Kalibrierung")
         self.create_config_tab(config_tab)
         
-        # Map-Tab
-        map_tab = ttk.Frame(self.tab_control)
-        self.tab_control.add(map_tab, text="Gleisplan")
-        self.create_map_tab(map_tab)
-        
         # Automation-Tab
         automation_tab = ttk.Frame(self.tab_control)
         self.tab_control.add(automation_tab, text="Automation")
         self.create_automation_tab(automation_tab)
-        
-        # Status-Dictionary für Servos
-        self.servo_status = {}
-        for i in range(16):
-            self.servo_status[i] = {
-                'frame': None,
-                'label': None,
-                'position': 'links'
-            }
     
     def create_control_tab(self, parent):
         # Grid für Servo-Steuerung
@@ -112,9 +101,8 @@ class WeichensteuerungGUI:
             status_label = ttk.Label(servo_frame, text="Position: Links")
             status_label.grid(row=0, column=0, columnspan=2)
             
-            # Speichere Frame und Label
-            self.servo_status[i]['frame'] = servo_frame
-            self.servo_status[i]['label'] = status_label
+            # Speichere Label für Updates
+            self.servo_labels[i] = status_label
             
             # Buttons
             ttk.Button(servo_frame, text="Links", 
@@ -164,30 +152,6 @@ class WeichensteuerungGUI:
                   command=lambda: self.test_position('left')).grid(row=0, column=0, padx=5, pady=5)
         ttk.Button(test_frame, text="Test Position B", 
                   command=lambda: self.test_position('right')).grid(row=0, column=1, padx=5, pady=5)
-    
-    def create_map_tab(self, parent):
-        # Canvas für Gleisplan
-        canvas = tk.Canvas(parent, width=800, height=600, bg='white')
-        canvas.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        
-        # Scrollbars
-        x_scrollbar = ttk.Scrollbar(parent, orient=tk.HORIZONTAL, command=canvas.xview)
-        x_scrollbar.grid(row=1, column=0, sticky=(tk.W, tk.E))
-        
-        y_scrollbar = ttk.Scrollbar(parent, orient=tk.VERTICAL, command=canvas.yview)
-        y_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
-        
-        canvas.configure(xscrollcommand=x_scrollbar.set, yscrollcommand=y_scrollbar.set)
-        
-        # Toolbar
-        toolbar = ttk.Frame(parent)
-        toolbar.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E))
-        
-        ttk.Button(toolbar, text="Gleis hinzufügen").pack(side=tk.LEFT, padx=2)
-        ttk.Button(toolbar, text="Weiche hinzufügen").pack(side=tk.LEFT, padx=2)
-        ttk.Button(toolbar, text="Löschen").pack(side=tk.LEFT, padx=2)
-        ttk.Button(toolbar, text="Speichern").pack(side=tk.RIGHT, padx=2)
-        ttk.Button(toolbar, text="Laden").pack(side=tk.RIGHT, padx=2)
     
     def create_automation_tab(self, parent):
         # Pattern-Auswahl
@@ -275,10 +239,8 @@ class WeichensteuerungGUI:
         try:
             self.servo_controller.set_servo_position(servo_id, position)
             # Aktualisiere Status-Label
-            label = self.servo_status[servo_id]['label']
-            if label:
-                label.configure(text=f"Position: {'Links' if position == 'left' else 'Rechts'}")
-            self.servo_status[servo_id]['position'] = position
+            if servo_id in self.servo_labels:
+                self.servo_labels[servo_id].configure(text=f"Position: {'Links' if position == 'left' else 'Rechts'}")
         except Exception as e:
             messagebox.showerror("Fehler", f"Fehler beim Setzen der Position: {str(e)}")
     
