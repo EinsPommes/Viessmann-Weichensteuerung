@@ -4,8 +4,20 @@ from tkinter import ttk, Canvas
 class TrackMap:
     def __init__(self, parent):
         self.parent = parent
-        self.canvas = Canvas(parent, bg='white', width=800, height=400)
+        
+        # Mittlere Kartengröße
+        self.canvas = Canvas(parent, bg='white', width=700, height=350)
         self.canvas.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # Frame für die Legende
+        legend_frame = ttk.Frame(parent)
+        legend_frame.grid(row=1, column=0, pady=5)
+        
+        # Legende
+        ttk.Label(legend_frame, text="Rot = Geschlossen", 
+                 font=('TkDefaultFont', 10)).grid(row=0, column=0, padx=15)
+        ttk.Label(legend_frame, text="Grün = Offen", 
+                 font=('TkDefaultFont', 10)).grid(row=0, column=1, padx=15)
         
         # Straßen zeichnen
         self.draw_roads()
@@ -16,37 +28,35 @@ class TrackMap:
     
     def draw_roads(self):
         # Hauptstraße (horizontal)
-        self.canvas.create_line(50, 200, 750, 200, width=20, fill='gray')
+        self.canvas.create_line(50, 175, 650, 175, width=25, fill='gray')
         
         # Parkplatz-Zufahrten
-        self.canvas.create_line(200, 200, 200, 100, width=20, fill='gray')
-        self.canvas.create_line(400, 200, 400, 100, width=20, fill='gray')
-        self.canvas.create_line(600, 200, 600, 100, width=20, fill='gray')
+        self.canvas.create_line(200, 175, 200, 75, width=25, fill='gray')
+        self.canvas.create_line(500, 175, 500, 75, width=25, fill='gray')
         
         # Parkplätze (Rechtecke)
-        for x in [150, 350, 550]:
-            self.canvas.create_rectangle(x-30, 20, x+30, 80, fill='lightgray')
+        for x in [200, 500]:
+            self.canvas.create_rectangle(x-40, 30, x+40, 65, fill='lightgray')
         
         # Beschriftungen
-        self.canvas.create_text(200, 50, text="P1", font=('Arial', 12, 'bold'))
-        self.canvas.create_text(400, 50, text="P2", font=('Arial', 12, 'bold'))
-        self.canvas.create_text(600, 50, text="P3", font=('Arial', 12, 'bold'))
+        self.canvas.create_text(200, 47, text="P1", font=('Arial', 12, 'bold'))
+        self.canvas.create_text(500, 47, text="P2", font=('Arial', 12, 'bold'))
         
         # Hauptstraßen-Text
-        self.canvas.create_text(400, 250, text="Hauptstraße", font=('Arial', 10))
+        self.canvas.create_text(350, 220, text="Hauptstraße", font=('Arial', 10))
     
     def draw_barriers(self):
         # Barrieren als Linien mit Servos
-        barrier_positions = [(200, 150), (400, 150), (600, 150)]
+        barrier_positions = [(200, 125), (500, 125)]
         for i, pos in enumerate(barrier_positions):
-            # Servo (Kreis)
-            servo = self.canvas.create_oval(pos[0]-8, pos[1]-8, 
-                                         pos[0]+8, pos[1]+8, 
+            # Servo
+            servo = self.canvas.create_oval(pos[0]-10, pos[1]-10, 
+                                         pos[0]+10, pos[1]+10, 
                                          fill='red', tags=f'servo_{i+1}')
             
-            # Barriere (Linie)
+            # Barriere
             barrier = self.canvas.create_line(pos[0], pos[1], 
-                                           pos[0]+30, pos[1], 
+                                           pos[0]+35, pos[1], 
                                            width=3, fill='red',
                                            tags=f'barrier_{i+1}')
             
@@ -54,7 +64,7 @@ class TrackMap:
             
             # Label für Servo-Nummer
             self.canvas.create_text(pos[0]-20, pos[1], 
-                                  text=f'S{i+1}', font=('Arial', 8))
+                                  text=f'S{i+1}', font=('Arial', 10))
     
     def update_switch(self, switch_id, position):
         """Aktualisiert die Anzeige einer Barriere"""
@@ -75,9 +85,9 @@ class TrackMap:
                 # Barriere offen (vertikal)
                 self.canvas.coords(barrier['barrier'],
                                 center_x, center_y,
-                                center_x, center_y-30)
+                                center_x, center_y-35)
             else:
                 # Barriere geschlossen (horizontal)
                 self.canvas.coords(barrier['barrier'],
                                 center_x, center_y,
-                                center_x+30, center_y)
+                                center_x+35, center_y)

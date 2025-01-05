@@ -53,11 +53,21 @@ class WeichensteuerungGUI:
         self.root = root
         self.root.title("Weichensteuerung")
         
-        # Fenstergröße für 10 Zoll Monitor (1024x600 typische Auflösung)
+        # Fenstergröße für 10 Zoll Monitor (1024x600)
         self.root.geometry("1024x600")
         
-        # Skalierung für hochauflösende Displays
-        self.root.tk.call('tk', 'scaling', 1.5)
+        # Mittlere Skalierung
+        self.root.tk.call('tk', 'scaling', 1.4)
+        
+        # Style konfigurieren
+        style = ttk.Style()
+        style.configure('Servo.TLabelframe', padding=3)
+        style.configure('Servo.TButton', padding=2)
+        style.configure('Servo.TLabel', font=('TkDefaultFont', 10))
+        
+        # Hauptframe mit mittlerem Padding
+        main_frame = ttk.Frame(root, padding="5")
+        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         # Controller initialisieren
         try:
@@ -69,14 +79,6 @@ class WeichensteuerungGUI:
             self.system_status = f"Error: {str(e)}"
             messagebox.showerror("Fehler", f"Fehler beim Starten: {str(e)}")
             raise
-        
-        # Hauptframe mit Padding für bessere Lesbarkeit
-        main_frame = ttk.Frame(root, padding="5")
-        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        
-        # Grid-Konfiguration für bessere Skalierung
-        root.grid_rowconfigure(0, weight=1)
-        root.grid_columnconfigure(0, weight=1)
         
         # Status-Dictionary für Servos
         self.servo_status = {}
@@ -118,38 +120,42 @@ class WeichensteuerungGUI:
     
     def create_control_tab(self, parent):
         # Frame für Servo-Grid
-        control_frame = ttk.Frame(parent)
+        control_frame = ttk.Frame(parent, padding="3")
         control_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
-        # Grid für Servo-Steuerung (4x4 Grid)
+        # Grid für Servos (4x4)
         for i in range(16):
             row = i // 4
             col = i % 4
             
-            # Frame für jeden Servo mit angepasster Größe
-            servo_frame = ttk.LabelFrame(control_frame, text=f"Servo {i+1}", padding="3")
-            servo_frame.grid(row=row, column=col, padx=3, pady=3, sticky=(tk.W, tk.E, tk.N, tk.S))
+            # Servo Frame
+            servo_frame = ttk.Labelframe(control_frame, text=f"Servo {i+1}", 
+                                       style='Servo.TLabelframe')
+            servo_frame.grid(row=row, column=col, padx=3, pady=3, sticky=(tk.W, tk.E))
             
-            # Grid-Konfiguration für gleichmäßige Größe
-            control_frame.grid_rowconfigure(row, weight=1)
-            control_frame.grid_columnconfigure(col, weight=1)
-            
-            # Status-Label mit größerer Schrift
-            status_label = ttk.Label(servo_frame, text="Position: Links", font=('TkDefaultFont', 9))
+            # Status Label
+            status_label = ttk.Label(servo_frame, text="Position: Links",
+                                   style='Servo.TLabel')
             status_label.grid(row=0, column=0, columnspan=2, pady=2)
             
-            # Buttons mit angepasster Größe
-            btn_left = ttk.Button(servo_frame, text="Links", width=8,
-                                command=lambda x=i: self.set_servo_position(x, 'left'))
-            btn_left.grid(row=1, column=0, padx=2, pady=2)
+            # Buttons
+            ttk.Button(servo_frame, text="Links", width=8,
+                      style='Servo.TButton',
+                      command=lambda x=i: self.set_servo_position(x, 'left')).grid(
+                          row=1, column=0, padx=2, pady=2)
             
-            btn_right = ttk.Button(servo_frame, text="Rechts", width=8,
-                                 command=lambda x=i: self.set_servo_position(x, 'right'))
-            btn_right.grid(row=1, column=1, padx=2, pady=2)
+            ttk.Button(servo_frame, text="Rechts", width=8,
+                      style='Servo.TButton',
+                      command=lambda x=i: self.set_servo_position(x, 'right')).grid(
+                          row=1, column=1, padx=2, pady=2)
             
-            # Speichere Frame und Label
             self.servo_status[i]['frame'] = servo_frame
             self.servo_status[i]['label'] = status_label
+        
+        # Grid-Konfiguration
+        for i in range(4):
+            control_frame.columnconfigure(i, weight=1)
+            control_frame.rowconfigure(i, weight=1)
     
     def create_map_tab(self, parent):
         # Gleiskarte erstellen
