@@ -79,10 +79,24 @@ class WeichensteuerungGUI:
         self.tab_control.add(config_tab, text="Kalibrierung")
         self.create_config_tab(config_tab)
         
+        # Map-Tab
+        map_tab = ttk.Frame(self.tab_control)
+        self.tab_control.add(map_tab, text="Gleisplan")
+        self.create_map_tab(map_tab)
+        
         # Automation-Tab
         automation_tab = ttk.Frame(self.tab_control)
         self.tab_control.add(automation_tab, text="Automation")
         self.create_automation_tab(automation_tab)
+        
+        # Status-Dictionary für Servos
+        self.servo_status = {}
+        for i in range(16):
+            self.servo_status[i] = {
+                'frame': None,
+                'label': None,
+                'position': 'links'
+            }
     
     def create_control_tab(self, parent):
         # Grid für Servo-Steuerung
@@ -97,6 +111,10 @@ class WeichensteuerungGUI:
             # Status-Label
             status_label = ttk.Label(servo_frame, text="Position: Links")
             status_label.grid(row=0, column=0, columnspan=2)
+            
+            # Speichere Frame und Label
+            self.servo_status[i]['frame'] = servo_frame
+            self.servo_status[i]['label'] = status_label
             
             # Buttons
             ttk.Button(servo_frame, text="Links", 
@@ -147,10 +165,63 @@ class WeichensteuerungGUI:
         ttk.Button(test_frame, text="Test Position B", 
                   command=lambda: self.test_position('right')).grid(row=0, column=1, padx=5, pady=5)
     
+    def create_map_tab(self, parent):
+        # Canvas für Gleisplan
+        canvas = tk.Canvas(parent, width=800, height=600, bg='white')
+        canvas.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # Scrollbars
+        x_scrollbar = ttk.Scrollbar(parent, orient=tk.HORIZONTAL, command=canvas.xview)
+        x_scrollbar.grid(row=1, column=0, sticky=(tk.W, tk.E))
+        
+        y_scrollbar = ttk.Scrollbar(parent, orient=tk.VERTICAL, command=canvas.yview)
+        y_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        
+        canvas.configure(xscrollcommand=x_scrollbar.set, yscrollcommand=y_scrollbar.set)
+        
+        # Toolbar
+        toolbar = ttk.Frame(parent)
+        toolbar.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E))
+        
+        ttk.Button(toolbar, text="Gleis hinzufügen").pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Weiche hinzufügen").pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Löschen").pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Speichern").pack(side=tk.RIGHT, padx=2)
+        ttk.Button(toolbar, text="Laden").pack(side=tk.RIGHT, padx=2)
+    
     def create_automation_tab(self, parent):
-        # Automation Controls
-        control_frame = ttk.LabelFrame(parent, text="Automation", padding="10")
-        control_frame.grid(row=0, column=0, padx=5, pady=5, sticky=(tk.W, tk.E))
+        # Pattern-Auswahl
+        pattern_frame = ttk.LabelFrame(parent, text="Automatik-Muster", padding="10")
+        pattern_frame.grid(row=0, column=0, padx=5, pady=5, sticky=(tk.W, tk.E))
+        
+        # Muster-Liste
+        patterns = [
+            "Muster 1: Links → Rechts",
+            "Muster 2: Rechts → Links",
+            "Muster 3: Alternierend",
+            "Muster 4: Zufällig",
+            "Muster 5: Welle",
+            "Muster 6: Kreuz"
+        ]
+        
+        self.selected_pattern = tk.StringVar()
+        pattern_list = ttk.Combobox(pattern_frame, textvariable=self.selected_pattern)
+        pattern_list['values'] = patterns
+        pattern_list.set(patterns[0])
+        pattern_list.grid(row=0, column=0, padx=5, pady=5)
+        
+        # Geschwindigkeit
+        speed_frame = ttk.LabelFrame(pattern_frame, text="Geschwindigkeit", padding="5")
+        speed_frame.grid(row=1, column=0, padx=5, pady=5, sticky=(tk.W, tk.E))
+        
+        self.automation_speed = tk.DoubleVar(value=1.0)
+        speed_scale = ttk.Scale(speed_frame, from_=0.1, to=2.0, orient=tk.HORIZONTAL,
+                              variable=self.automation_speed)
+        speed_scale.grid(row=0, column=0, padx=5, pady=5, sticky=(tk.W, tk.E))
+        
+        # Start/Stop Buttons
+        control_frame = ttk.Frame(parent)
+        control_frame.grid(row=1, column=0, padx=5, pady=5, sticky=(tk.W, tk.E))
         
         ttk.Button(control_frame, text="Start", 
                   command=self.start_automation).grid(row=0, column=0, padx=5, pady=5)
@@ -203,11 +274,20 @@ class WeichensteuerungGUI:
     def set_servo_position(self, servo_id, position):
         try:
             self.servo_controller.set_servo_position(servo_id, position)
+            # Aktualisiere Status-Label
+            label = self.servo_status[servo_id]['label']
+            if label:
+                label.configure(text=f"Position: {'Links' if position == 'left' else 'Rechts'}")
+            self.servo_status[servo_id]['position'] = position
         except Exception as e:
             messagebox.showerror("Fehler", f"Fehler beim Setzen der Position: {str(e)}")
     
     def start_automation(self):
         try:
+            pattern = self.selected_pattern.get().split(':')[0].strip()
+            speed = self.automation_speed.get()
+            self.automation_controller.set_pattern(pattern)
+            self.automation_controller.set_speed(speed)
             self.automation_controller.start()
         except Exception as e:
             messagebox.showerror("Fehler", f"Fehler beim Starten der Automation: {str(e)}")
