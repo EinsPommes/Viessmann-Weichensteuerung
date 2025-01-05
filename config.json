@@ -1,0 +1,34 @@
+{
+    "servo_config": {
+        "default_left_angle": 6.5,
+        "default_right_angle": 8.5,
+        "servos": [
+            {"id": 1, "gpio": 15, "name": "Servo 1", "left_angle": 6.5, "right_angle": 8.5},
+            {"id": 2, "gpio": 18, "name": "Servo 2", "left_angle": 6.5, "right_angle": 8.5},
+            {"id": 3, "gpio": 23, "name": "Servo 3", "left_angle": 6.5, "right_angle": 8.5},
+            {"id": 4, "gpio": 24, "name": "Servo 4", "left_angle": 6.5, "right_angle": 8.5},
+            {"id": 5, "gpio": 25, "name": "Servo 5", "left_angle": 6.5, "right_angle": 8.5},
+            {"id": 6, "gpio": 8, "name": "Servo 6", "left_angle": 6.5, "right_angle": 8.5},
+            {"id": 7, "gpio": 7, "name": "Servo 7", "left_angle": 6.5, "right_angle": 8.5},
+            {"id": 8, "gpio": 12, "name": "Servo 8", "left_angle": 6.5, "right_angle": 8.5},
+            {"id": 9, "gpio": 16, "name": "Servo 9", "left_angle": 6.5, "right_angle": 8.5},
+            {"id": 10, "gpio": 20, "name": "Servo 10", "left_angle": 6.5, "right_angle": 8.5},
+            {"id": 11, "gpio": 21, "name": "Servo 11", "left_angle": 6.5, "right_angle": 8.5}
+        ]
+    },
+    "web_interface": {
+        "port": 5000,
+        "host": "0.0.0.0",
+        "update_interval": 5000
+    },
+    "display": {
+        "width": 1024,
+        "height": 600,
+        "scaling": 1.4
+    },
+    "logging": {
+        "level": "INFO",
+        "backup_count": 5,
+        "max_size": 1048576
+    }
+}

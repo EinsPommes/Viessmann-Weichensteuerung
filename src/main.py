@@ -7,57 +7,46 @@ import json
 import os
 import tkinter as tk
 import sys
+import logging
+from logging.handlers import RotatingFileHandler
 
-# Konfigurationswerte
-CONFIG = {
-    # GPIO-Pins für die Hall-Sensoren (BCM-Nummerierung)
-    'HALL_SENSOR_PINS': [17, 18, 27, 22, 23, 24, 25, 4,
-                        5, 6, 12, 13, 16, 19, 20, 21],
-    
-    # Servo-Kalibrierungswerte
-    'SERVO_CONFIG': {
-        'LEFT_ANGLE': 0,    # Minimaler Winkel
-        'RIGHT_ANGLE': 180, # Maximaler Winkel
-        'MIN_PULSE': 500,   # Minimale Pulsweite (µs)
-        'MAX_PULSE': 2500   # Maximale Pulsweite (µs)
-    },
-    
-    # I2C-Konfiguration
-    'I2C_ADDRESS': 0x40,    # Standard-Adresse des PCA9685
-}
+# Konfiguration laden
+config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config.json')
+with open(config_path, 'r') as f:
+    CONFIG = json.load(f)
 
-def load_config():
-    """Lädt die Konfiguration aus config.json wenn vorhanden"""
-    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
-    if os.path.exists(config_path):
-        with open(config_path, 'r') as f:
-            loaded_config = json.load(f)
-            CONFIG.update(loaded_config)
+# Logging konfigurieren
+log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'logs')
+os.makedirs(log_dir, exist_ok=True)
 
-def save_config():
-    """Speichert die aktuelle Konfiguration"""
-    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
-    with open(config_path, 'w') as f:
-        json.dump(CONFIG, f, indent=4)
+# Rotating File Handler einrichten
+log_file = os.path.join(log_dir, 'weichensteuerung.log')
+handler = RotatingFileHandler(
+    log_file,
+    maxBytes=CONFIG['logging']['max_size'],
+    backupCount=CONFIG['logging']['backup_count']
+)
+handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 
-import tkinter as tk
-from tkinter import ttk, messagebox
-import json
-import os
-from servo_controller import ServoController
-from automation_controller import AutomationController
-from hall_sensor import HallSensor
+# Logger konfigurieren
+logger = logging.getLogger('weichensteuerung')
+logger.setLevel(CONFIG['logging']['level'])
+logger.addHandler(handler)
 
 class WeichensteuerungGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Weichensteuerung")
+        logger.info("Starte Weichensteuerung GUI")
         
-        # Fenstergröße für 10 Zoll Monitor (1024x600)
-        self.root.geometry("1024x600")
+        # Fenstergröße aus Konfiguration
+        self.root.geometry(f"{CONFIG['display']['width']}x{CONFIG['display']['height']}")
+        
+        # Skalierung aus Konfiguration
+        self.root.tk.call('tk', 'scaling', CONFIG['display']['scaling'])
         
         # Mittlere Skalierung
-        self.root.tk.call('tk', 'scaling', 1.4)
+        #self.root.tk.call('tk', 'scaling', 1.4)
         
         # Style konfigurieren
         style = ttk.Style()
@@ -404,31 +393,57 @@ Version: 1.0
         import subprocess
         import sys
         import os
+        import shutil
+        from datetime import datetime
 
         try:
+            logger.info("Starte Software-Update")
             # Aktuelles Verzeichnis speichern
             current_dir = os.getcwd()
             
             # In das Projektverzeichnis wechseln
-            os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            os.chdir(project_dir)
+            logger.info(f"Wechsle in Verzeichnis: {project_dir}")
+
+            # Backup erstellen
+            backup_dir = os.path.join(project_dir, 'backups')
+            os.makedirs(backup_dir, exist_ok=True)
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            backup_path = os.path.join(backup_dir, f'backup_{timestamp}')
+            
+            logger.info(f"Erstelle Backup: {backup_path}")
+            shutil.copytree(project_dir, backup_path, 
+                          ignore=shutil.ignore_patterns('backups', 'logs', '.git'))
             
             # Git-Befehle ausführen
+            logger.info("Führe git fetch aus")
             subprocess.check_call(['git', 'fetch', 'origin'])
+            
+            logger.info("Führe git reset aus")
             subprocess.check_call(['git', 'reset', '--hard', 'origin/main'])
             
             # Zurück zum ursprünglichen Verzeichnis
             os.chdir(current_dir)
             
             # Erfolgsmeldung
-            messagebox.showinfo("Update", "Update erfolgreich! Bitte starten Sie das Programm neu.")
+            logger.info("Update erfolgreich abgeschlossen")
+            messagebox.showinfo("Update", 
+                              "Update erfolgreich! Ein Backup wurde erstellt.\n"
+                              f"Backup-Pfad: {backup_path}\n\n"
+                              "Bitte starten Sie das Programm neu.")
             
             # Programm beenden
             self.quit_application()
             
         except subprocess.CalledProcessError as e:
-            messagebox.showerror("Fehler", f"Update fehlgeschlagen: {str(e)}")
+            error_msg = f"Update fehlgeschlagen: {str(e)}"
+            logger.error(error_msg)
+            messagebox.showerror("Fehler", error_msg)
         except Exception as e:
-            messagebox.showerror("Fehler", f"Unerwarteter Fehler: {str(e)}")
+            error_msg = f"Unerwarteter Fehler: {str(e)}"
+            logger.error(error_msg)
+            messagebox.showerror("Fehler", error_msg)
 
 def main():
     try:
