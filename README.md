@@ -1,56 +1,17 @@
 # Viessmann Weichensteuerung
 
-Eine Raspberry Pi-basierte Steuerung für Modellbahn-Weichen mit MG90S Servomotoren.
+Eine GUI-basierte Steuerung für Servomotoren zur Kontrolle von Parkplatz-Barrieren, entwickelt für den Raspberry Pi.
 
 ## Features
 
-- Steuerung von bis zu 12 Weichen
-- Grafische Benutzeroberfläche mit Streckenlayout
-- Automatik-Modus für vorprogrammierte Abläufe
-- Hall-Sensor-Überwachung für Weichenpositionen
-- Konfigurierbare Servo-Positionen
+- Steuerung von bis zu 16 Servomotoren
+- Intuitive grafische Benutzeroberfläche
+- Visualisierung der Barrieren-Positionen
+- Automatisierungsmöglichkeiten
+- Kalibrierungsfunktionen
+- Optimiert für 10-Zoll-Display
 
-## Hardware
-
-### Benötigte Komponenten
-
-- Raspberry Pi (3B+ oder neuer empfohlen)
-- MG90S Servomotoren (bis zu 12 Stück)
-- Hall-Sensoren (optional)
-- 5V Netzteil (min. 2A)
-
-### MG90S Servomotor Spezifikationen
-
-- Betriebsspannung: 4.8V-6V
-- Drehmoment: 1.8kg/cm (4.8V) bis 2.2kg/cm (6V)
-- Geschwindigkeit: 0.1s/60° (4.8V)
-- Winkelbereich: 0° bis 180°
-- Größe: 22.5x12x35.5mm
-- Gewicht: 13.4g
-- Metallgetriebe für lange Haltbarkeit
-
-### GPIO-Anschlüsse
-
-Die Servos sind wie folgt an die GPIO-Pins angeschlossen:
-
-| Weiche | GPIO-Pin |
-|--------|----------|
-| 1      | 17       |
-| 2      | 18       |
-| 3      | 27       |
-| 4      | 22       |
-| 5      | 23       |
-| 6      | 24       |
-| 7      | 25       |
-| 8      | 4        |
-| 9      | 5        |
-| 10     | 6        |
-| 11     | 13       |
-| 12     | 19       |
-
-## Software
-
-### Installation
+## Installation
 
 1. Repository klonen:
 ```bash
@@ -60,82 +21,61 @@ cd Viessmann-Weichensteuerung
 
 2. Abhängigkeiten installieren:
 ```bash
-pip install -r requirements.txt
+sudo apt-get update
+sudo apt-get install python3-tk python3-pip
+pip3 install RPi.GPIO
 ```
 
-3. Programm starten:
+## Autostart einrichten
+
+1. Startskript ausführbar machen:
 ```bash
-python src/main.py
+sudo chmod +x /home/mika/Viessmann-Weichensteuerung/start_weichensteuerung.sh
 ```
 
-### Konfiguration
-
-Die Servo-Positionen können in der `config.json` angepasst werden:
-
-```json
-{
-    "servo_pins": [17, 18, 27, 22, 23, 24, 25, 4, 5, 6, 13, 19],
-    "servo_left_angles": [6.5, 6.5, 6.5, 6.5, 6.5, 6.5, 6.5, 6.5, 6.5, 6.5, 6.5, 6.5],
-    "servo_right_angles": [8.5, 8.5, 8.5, 8.5, 8.5, 8.5, 8.5, 8.5, 8.5, 8.5, 8.5, 8.5]
-}
-```
-
-- `servo_pins`: GPIO-Pins für die Servos
-- `servo_left_angles`: PWM-Werte für die linke Position (~45°)
-- `servo_right_angles`: PWM-Werte für die rechte Position (~135°)
-
-## Updates
-
-### Raspberry Pi aktualisieren
-
-1. Terminal öffnen
-2. In das Projektverzeichnis wechseln:
+2. Service installieren:
 ```bash
-cd ~/Viessmann-Weichensteuerung
+sudo cp /home/mika/Viessmann-Weichensteuerung/weichensteuerung.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable weichensteuerung.service
+sudo systemctl start weichensteuerung.service
 ```
 
-3. Neue Version von GitHub holen:
-```bash
-git pull origin main
-```
+## Verwendung
 
-4. Programm neu starten:
-```bash
-python src/main.py
-```
+### Hauptfunktionen
 
-### Fehlerbehebung
+- **Steuerung**: Direktes Steuern der Servos/Barrieren
+- **Gleiskarte**: Visuelle Darstellung der Barrieren-Positionen
+- **Kalibrierung**: Anpassen der Servo-Positionen
+- **Automation**: Automatische Steuerungssequenzen
+- **Info & Settings**: Systeminformationen und Einstellungen
 
-Falls es Konflikte gibt:
-1. Lokale Änderungen verwerfen:
-```bash
-git reset --hard origin/main
-```
+### Servo-Steuerung
 
-2. Neu von GitHub laden:
-```bash
-git pull origin main
-```
+- Links-Taste: Barriere schließen
+- Rechts-Taste: Barriere öffnen
+- Status-Anzeige zeigt aktuelle Position
 
-## Bedienung
+## Hardware-Anforderungen
 
-1. **Manuelle Steuerung**
-   - Klicken Sie auf die Weichenschalter in der GUI
-   - Grün = Position korrekt
-   - Rot = Positionsfehler
+- Raspberry Pi (getestet mit Raspberry Pi 4)
+- 10-Zoll-Display (1024x600)
+- Servomotoren (z.B. MG90S)
+- Externe Stromversorgung für Servos
 
-2. **Automatik-Modus**
-   - Wählen Sie einen Modus (Sequentiell/Zufällig)
-   - Start/Stop über die Buttons
+## GPIO-Pins
 
-3. **Test-Funktion**
-   - Jede Weiche kann einzeln getestet werden
-   - Prüft Servo-Bewegung und Sensor-Status
+Die Servos sind wie folgt konfiguriert:
+- Servo 1: GPIO 15
+- Servo 2: GPIO 18
+- usw.
+
+## Entwickelt von
+
+- EinsPommes
+- Website: Chill-zone.xyz
 
 ## Lizenz
 
-MIT License - siehe [LICENSE](LICENSE) Datei.
-
-## Autor
-
-Entwickelt von EinsPommes
+Dieses Projekt steht unter der MIT-Lizenz.
