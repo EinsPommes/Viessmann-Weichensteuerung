@@ -444,6 +444,26 @@ Weboberfläche:
             # Wechsle in das Projektverzeichnis
             project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             
+            # Prüfe auf lokale Änderungen
+            status = subprocess.run(['git', 'status', '--porcelain'],
+                                 cwd=project_dir,
+                                 capture_output=True,
+                                 text=True)
+            
+            if status.stdout.strip():
+                # Es gibt lokale Änderungen
+                if messagebox.askyesno("Lokale Änderungen", 
+                    "Es gibt lokale Änderungen. Möchten Sie diese erst speichern?\n"
+                    "- Ja: Änderungen werden committet\n"
+                    "- Nein: Änderungen werden verworfen"):
+                    # Commit lokale Änderungen
+                    subprocess.run(['git', 'add', '.'], cwd=project_dir)
+                    subprocess.run(['git', 'commit', '-m', "Automatisches Backup vor Update"], 
+                                cwd=project_dir)
+                else:
+                    # Verwerfe lokale Änderungen
+                    subprocess.run(['git', 'reset', '--hard'], cwd=project_dir)
+            
             # Führe git fetch origin main aus
             result = subprocess.run(['git', 'fetch', 'origin', 'main'], 
                                  cwd=project_dir,
