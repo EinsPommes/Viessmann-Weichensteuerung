@@ -262,18 +262,13 @@ class WeichensteuerungGUI:
     
     def create_info_tab(self, parent):
         """Erstellt den Info & Settings Tab"""
-        info_frame = ttk.Frame(self.tab_control)
-        self.tab_control.add(info_frame, text='Info & Settings')
-        
-        # Container für Text und Buttons
-        content_frame = ttk.Frame(info_frame)
+        content_frame = ttk.Frame(parent)
         content_frame.pack(fill='both', expand=True, padx=10, pady=10)
         
-        # Info-Text
         info_text = """Entwickelt von: EinsPommes
 Website: Chill-zone.xyz
 
-Version: 1.1
+Version: 1.2
  2025 EinsPommes
 
 Weboberfläche:
@@ -289,14 +284,11 @@ Weboberfläche:
 - Gleiche Funktionen wie GUI
 - Automatische Aktualisierung"""
         
-        # Label für den Info-Text
         ttk.Label(content_frame, text=info_text, justify=tk.LEFT).pack(side='left', anchor='nw')
         
-        # Frame für die Buttons auf der rechten Seite
         button_frame = ttk.Frame(content_frame)
         button_frame.pack(side='right', anchor='ne')
         
-        # Update und Beenden Buttons
         update_button = ttk.Button(button_frame, text="Update", command=self.check_for_updates)
         update_button.pack(pady=2)
         
