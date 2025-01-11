@@ -182,14 +182,13 @@ class ServoController:
             current_duty = self.servo_states[servo_id]['current_duty']
             
             # Wenn der Servo bereits in der richtigen Position ist, nichts tun
-            if abs(current_duty - target_duty) < 0.1:
+            if self.servo_states[servo_id]['position'] == position:
                 return
                 
             # Geschwindigkeit in Grad pro Sekunde
             speed = config['speed']
             
             # Berechne die Anzahl der Schritte basierend auf der Geschwindigkeit
-            # Je kleiner die Schritte, desto sanfter die Bewegung
             total_steps = 50  # Anzahl der Schritte für die Bewegung
             step_size = (target_duty - current_duty) / total_steps
             step_delay = (1.0 / total_steps) * (1.0 / speed)  # Verzögerung zwischen den Schritten
@@ -200,17 +199,12 @@ class ServoController:
                 self.pwm[pin].ChangeDutyCycle(duty)
                 time.sleep(step_delay)
             
-            # Finale Position setzen
-            self.pwm[pin].ChangeDutyCycle(target_duty)
+            # Speichere die neue Position
+            self.servo_states[servo_id]['position'] = position
+            self.servo_states[servo_id]['current_duty'] = target_duty
             
-            # Status aktualisieren
-            self.servo_states[servo_id].update({
-                'position': position,
-                'current_duty': target_duty
-            })
-            
-            # Kurze Pause um den Servo zu stabilisieren
-            time.sleep(0.1)
+            # Stoppe PWM nach der Bewegung
+            self.pwm[pin].ChangeDutyCycle(0)
             
         except Exception as e:
             print(f"Fehler beim Setzen der Servo-Position: {e}")
