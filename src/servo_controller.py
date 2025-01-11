@@ -7,6 +7,7 @@ class ServoController:
     def __init__(self, config_file=None):
         # GPIO initialisieren
         GPIO.setmode(GPIO.BCM)
+        GPIO.setwarnings(False)
         
         # Servo-Pins (BCM-Nummern)
         self.servo_pins = [15, 18, 27, 22, 23, 24, 25, 4, 5, 6, 13, 19, 26, 16, 20, 21]
@@ -40,7 +41,8 @@ class ServoController:
         for i in range(16):
             self.servo_states[i] = {
                 'position': None,  # 'left' oder 'right'
-                'current_duty': 0
+                'current_duty': 0,
+                'is_moving': False
             }
 
     def load_config(self):
@@ -174,40 +176,38 @@ class ServoController:
             raise ValueError(f"Ungültige Position: {position}")
         
         try:
+            # Wenn der Servo sich bereits bewegt oder in der richtigen Position ist, nichts tun
+            if self.servo_states[servo_id]['is_moving'] or self.servo_states[servo_id]['position'] == position:
+                return
+                
             pin = self.servo_pins[servo_id]
             config = self.servo_config[servo_id]
             
-            # Ziel-Duty-Cycle berechnen
+            # Setze is_moving Flag
+            self.servo_states[servo_id]['is_moving'] = True
+            
+            # Ziel-Duty-Cycle
             target_duty = config['left_angle'] if position == 'left' else config['right_angle']
-            current_duty = self.servo_states[servo_id]['current_duty']
             
-            # Wenn der Servo bereits in der richtigen Position ist, nichts tun
-            if self.servo_states[servo_id]['position'] == position:
-                return
-                
-            # Geschwindigkeit in Grad pro Sekunde
-            speed = config['speed']
+            # Direkt zur Position bewegen
+            self.pwm[pin].ChangeDutyCycle(target_duty)
             
-            # Berechne die Anzahl der Schritte basierend auf der Geschwindigkeit
-            total_steps = 50  # Anzahl der Schritte für die Bewegung
-            step_size = (target_duty - current_duty) / total_steps
-            step_delay = (1.0 / total_steps) * (1.0 / speed)  # Verzögerung zwischen den Schritten
+            # Warte kurz, bis der Servo die Position erreicht hat
+            time.sleep(0.5)
             
-            # Sanft zur Zielposition bewegen
-            for step in range(total_steps + 1):
-                duty = current_duty + (step * step_size)
-                self.pwm[pin].ChangeDutyCycle(duty)
-                time.sleep(step_delay)
-            
-            # Speichere die neue Position
-            self.servo_states[servo_id]['position'] = position
-            self.servo_states[servo_id]['current_duty'] = target_duty
-            
-            # Stoppe PWM nach der Bewegung
+            # Stoppe PWM
             self.pwm[pin].ChangeDutyCycle(0)
+            
+            # Aktualisiere Status
+            self.servo_states[servo_id].update({
+                'position': position,
+                'current_duty': target_duty,
+                'is_moving': False
+            })
             
         except Exception as e:
             print(f"Fehler beim Setzen der Servo-Position: {e}")
+            self.servo_states[servo_id]['is_moving'] = False
             raise
 
     def get_servo_position(self, servo_id):
