@@ -1,118 +1,124 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-import tkinter as tk
-from tkinter import ttk
-from tkinter import messagebox
 from servo_controller import ServoController
+from hall_sensor import HallSensor
 from automation_controller import AutomationController
+from gui import GUI
 from track_map import TrackMap
-import logging
 import json
 import os
+import tkinter as tk
 import sys
-from logging.handlers import RotatingFileHandler
 import subprocess
-import shutil
-from datetime import datetime
 
-try:
-    # Konfiguration laden
-    config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config.json')
-    if not os.path.exists(config_path):
-        # Standard-Konfiguration wenn keine Datei existiert
-        CONFIG = {
-            "display": {
-                "width": 1024,
-                "height": 600,
-                "scaling": 1.4
-            },
-            "logging": {
-                "level": "INFO",
-                "backup_count": 5,
-                "max_size": 1048576
-            }
-        }
-    else:
+# Konfigurationswerte
+CONFIG = {
+    # GPIO-Pins für die Hall-Sensoren (BCM-Nummerierung)
+    'HALL_SENSOR_PINS': [17, 18, 27, 22, 23, 24, 25, 4,
+                        5, 6, 12, 13, 16, 19, 20, 21],
+    
+    # Servo-Kalibrierungswerte
+    'SERVO_CONFIG': {
+        'LEFT_ANGLE': 0,    # Minimaler Winkel
+        'RIGHT_ANGLE': 180, # Maximaler Winkel
+        'MIN_PULSE': 500,   # Minimale Pulsweite (µs)
+        'MAX_PULSE': 2500   # Maximale Pulsweite (µs)
+    },
+    
+    # I2C-Konfiguration
+    'I2C_ADDRESS': 0x40,    # Standard-Adresse des PCA9685
+}
+
+def load_config():
+    """Lädt die Konfiguration aus config.json wenn vorhanden"""
+    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+    if os.path.exists(config_path):
         with open(config_path, 'r') as f:
-            CONFIG = json.load(f)
+            loaded_config = json.load(f)
+            CONFIG.update(loaded_config)
 
-    # Logging konfigurieren
-    log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'logs')
-    os.makedirs(log_dir, exist_ok=True)
+def save_config():
+    """Speichert die aktuelle Konfiguration"""
+    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+    with open(config_path, 'w') as f:
+        json.dump(CONFIG, f, indent=4)
 
-    # Rotating File Handler einrichten
-    log_file = os.path.join(log_dir, 'weichensteuerung.log')
-    handler = RotatingFileHandler(
-        log_file,
-        maxBytes=CONFIG['logging']['max_size'],
-        backupCount=CONFIG['logging']['backup_count']
-    )
-    handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-
-    # Logger konfigurieren
-    logger = logging.getLogger('weichensteuerung')
-    logger.setLevel(CONFIG['logging']['level'])
-    logger.addHandler(handler)
-
-except Exception as e:
-    print(f"Fehler beim Initialisieren der Konfiguration: {str(e)}")
-    sys.exit(1)
+import tkinter as tk
+from tkinter import ttk, messagebox
+import json
+import os
+from servo_controller import ServoController
+from automation_controller import AutomationController
+from hall_sensor import HallSensor
 
 class WeichensteuerungGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Weichensteuerung")
-        logger.info("Starte Weichensteuerung GUI")
         
-        # Fenstergröße aus Konfiguration
-        self.root.geometry(f"{CONFIG['display']['width']}x{CONFIG['display']['height']}")
+        # Fenstergröße für 10 Zoll Monitor (1024x600)
+        self.root.geometry("1024x600")
         
-        # Skalierung aus Konfiguration
-        self.root.tk.call('tk', 'scaling', CONFIG['display']['scaling'])
-
+        # Mittlere Skalierung
+        self.root.tk.call('tk', 'scaling', 1.4)
+        
         # Style konfigurieren
         style = ttk.Style()
-        style.configure('TNotebook.Tab', padding=(10, 5))
+        style.configure('Servo.TLabelframe', padding=3)
+        style.configure('Servo.TButton', padding=2)
+        style.configure('Servo.TLabel', font=('TkDefaultFont', 10))
         
-        # Notebook (Tab-Container) erstellen
-        self.notebook = ttk.Notebook(root)
-        self.notebook.grid(row=0, column=0, sticky=(tk.N, tk.S, tk.E, tk.W))
-        
-        # Tabs erstellen
-        self.control_frame = ttk.Frame(self.notebook)
-        self.track_frame = ttk.Frame(self.notebook)
-        self.calibration_frame = ttk.Frame(self.notebook)
-        self.automation_frame = ttk.Frame(self.notebook)
-        self.info_frame = ttk.Frame(self.notebook)
-        
-        # Tabs zum Notebook hinzufügen
-        self.notebook.add(self.control_frame, text='Steuerung')
-        self.notebook.add(self.track_frame, text='Gleiskarte')
-        self.notebook.add(self.calibration_frame, text='Kalibrierung')
-        self.notebook.add(self.automation_frame, text='Automation')
-        self.notebook.add(self.info_frame, text='Info & Settings')
+        # Hauptframe mit mittlerem Padding
+        main_frame = ttk.Frame(root, padding="5")
+        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         # Controller initialisieren
         try:
             self.servo_controller = ServoController()
             self.automation_controller = AutomationController(self.servo_controller)
+            self.hall_sensor = HallSensor()
             self.system_status = "Ready"
         except Exception as e:
             self.system_status = f"Error: {str(e)}"
-            logger.error(f"Fehler beim Initialisieren der Controller: {str(e)}")
-            
-        # Tabs erstellen
-        self.create_control_tab(self.control_frame)
-        self.create_track_tab(self.track_frame)
-        self.create_calibration_tab(self.calibration_frame)
-        self.create_automation_tab(self.automation_frame)
-        self.create_info_tab(self.info_frame)
+            messagebox.showerror("Fehler", f"Fehler beim Starten: {str(e)}")
+            raise
         
-        # Grid-Konfiguration
-        root.grid_rowconfigure(0, weight=1)
-        root.grid_columnconfigure(0, weight=1)
-
+        # Status-Dictionary für Servos
+        self.servo_status = {}
+        for i in range(16):
+            self.servo_status[i] = {
+                'frame': None,
+                'label': None,
+                'position': 'links'
+            }
+        
+        # Tabs erstellen
+        self.tab_control = ttk.Notebook(main_frame)
+        self.tab_control.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # Steuerungs-Tab
+        control_tab = ttk.Frame(self.tab_control)
+        self.tab_control.add(control_tab, text="Steuerung")
+        self.create_control_tab(control_tab)
+        
+        # Gleiskarte-Tab
+        map_tab = ttk.Frame(self.tab_control)
+        self.tab_control.add(map_tab, text="Gleiskarte")
+        self.create_map_tab(map_tab)
+        
+        # Kalibrierungs-Tab
+        config_tab = ttk.Frame(self.tab_control)
+        self.tab_control.add(config_tab, text="Kalibrierung")
+        self.create_config_tab(config_tab)
+        
+        # Automation-Tab
+        automation_tab = ttk.Frame(self.tab_control)
+        self.tab_control.add(automation_tab, text="Automation")
+        self.create_automation_tab(automation_tab)
+        
+        # Info-Tab
+        info_tab = ttk.Frame(self.tab_control)
+        self.tab_control.add(info_tab, text="Info & Settings")
+        self.create_info_tab(info_tab)
+    
     def create_control_tab(self, parent):
         # Frame für Servo-Grid
         control_frame = ttk.Frame(parent, padding="3")
@@ -151,21 +157,12 @@ class WeichensteuerungGUI:
         for i in range(4):
             control_frame.columnconfigure(i, weight=1)
             control_frame.rowconfigure(i, weight=1)
-
-    def create_track_tab(self, parent):
-        """Gleiskarte-Tab erstellen"""
-        # Frame für die Karte
-        map_frame = ttk.Frame(parent, padding="5")
-        map_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        
+    
+    def create_map_tab(self, parent):
         # Gleiskarte erstellen
-        self.track_map = TrackMap(map_frame)
+        self.track_map = TrackMap(parent)
         
-        # Grid-Konfiguration
-        parent.grid_rowconfigure(0, weight=1)
-        parent.grid_columnconfigure(0, weight=1)
-
-    def create_calibration_tab(self, parent):
+    def create_config_tab(self, parent):
         # Hauptframe mit Padding
         config_main = ttk.Frame(parent, padding="5")
         config_main.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
@@ -216,11 +213,8 @@ class WeichensteuerungGUI:
                   command=lambda: self.test_position('left')).grid(row=0, column=0, padx=5, pady=5)
         ttk.Button(button_frame, text="Test Position B", width=15,
                   command=lambda: self.test_position('right')).grid(row=0, column=1, padx=5, pady=5)
-<<<<<<< HEAD
         ttk.Button(button_frame, text="Speichern", width=15,
                   command=self.save_calibration).grid(row=0, column=2, padx=5, pady=5)
-=======
->>>>>>> 5ec4887295d416231d885e6cfb7c462acd87b57e
 
     def create_automation_tab(self, parent):
         # Hauptframe mit Padding
@@ -265,7 +259,7 @@ class WeichensteuerungGUI:
                   command=self.start_automation).grid(row=0, column=0, padx=5, pady=5)
         ttk.Button(control_frame, text="Stop", width=20,
                   command=self.stop_automation).grid(row=0, column=1, padx=5, pady=5)
-
+    
     def create_info_tab(self, parent):
         """Erstellt den Info & Settings Tab"""
         info_frame = ttk.Frame(self.tab_control)
@@ -453,9 +447,52 @@ Weboberfläche:
             messagebox.showerror("Fehler", f"Fehler beim Stoppen der Automation: {str(e)}")
             
     def check_for_updates(self):
-        """Prüft auf Updates"""
-        messagebox.showinfo("Update", "Keine Updates verfügbar.")
-        
+        """Prüft auf Updates und installiert sie bei Bedarf"""
+        try:
+            # Wechsle in das Projektverzeichnis
+            project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            
+            # Führe git fetch origin main aus
+            result = subprocess.run(['git', 'fetch', 'origin', 'main'], 
+                                 cwd=project_dir,
+                                 capture_output=True,
+                                 text=True)
+            
+            if result.returncode == 0:
+                # Prüfe ob Updates verfügbar sind
+                diff = subprocess.run(['git', 'diff', 'HEAD', 'origin/main', '--stat'],
+                                   cwd=project_dir,
+                                   capture_output=True,
+                                   text=True)
+                
+                if diff.stdout.strip():
+                    # Es gibt Updates
+                    if messagebox.askyesno("Updates verfügbar", 
+                                         "Es sind Updates verfügbar. Möchten Sie diese jetzt installieren?\n"
+                                         "Das Programm wird danach neu gestartet."):
+                        # Führe git pull aus
+                        pull_result = subprocess.run(['git', 'pull', 'origin', 'main'],
+                                                   cwd=project_dir,
+                                                   capture_output=True,
+                                                   text=True)
+                        
+                        if pull_result.returncode == 0:
+                            messagebox.showinfo("Update erfolgreich", 
+                                             "Updates wurden installiert. Das Programm wird neu gestartet.")
+                            # Programm neu starten
+                            python = sys.executable
+                            os.execl(python, python, *sys.argv)
+                        else:
+                            messagebox.showerror("Fehler", 
+                                               f"Installation fehlgeschlagen: {pull_result.stderr}")
+                else:
+                    messagebox.showinfo("Kein Update", "Es sind keine Updates verfügbar.")
+            else:
+                messagebox.showerror("Fehler", f"Update-Prüfung fehlgeschlagen: {result.stderr}")
+                
+        except Exception as e:
+            messagebox.showerror("Fehler", f"Fehler beim Update: {str(e)}")
+            
     def quit_application(self):
         """Beendet die Anwendung"""
         if messagebox.askokcancel("Beenden", "Möchten Sie die Anwendung wirklich beenden?"):
@@ -467,55 +504,30 @@ Weboberfläche:
         import subprocess
         import sys
         import os
-        import shutil
-        from datetime import datetime
 
         try:
-            logger.info("Starte Software-Update")
             # Aktuelles Verzeichnis speichern
             current_dir = os.getcwd()
             
             # In das Projektverzeichnis wechseln
-            project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            os.chdir(project_dir)
-            logger.info(f"Wechsle in Verzeichnis: {project_dir}")
-
-            # Backup erstellen
-            backup_dir = os.path.join(project_dir, 'backups')
-            os.makedirs(backup_dir, exist_ok=True)
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            backup_path = os.path.join(backup_dir, f'backup_{timestamp}')
-            
-            logger.info(f"Erstelle Backup: {backup_path}")
-            shutil.copytree(project_dir, backup_path, 
-                          ignore=shutil.ignore_patterns('backups', 'logs', '.git'))
+            os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
             
             # Git-Befehle ausführen
-            logger.info("Führe git fetch aus")
             subprocess.check_call(['git', 'fetch', 'origin'])
-            
-            logger.info("Führe git reset aus")
             subprocess.check_call(['git', 'reset', '--hard', 'origin/main'])
             
             # Zurück zum ursprünglichen Verzeichnis
             os.chdir(current_dir)
             
             # Erfolgsmeldung
-            logger.info("Update erfolgreich abgeschlossen")
-            messagebox.showinfo("Update", 
-                              "Update erfolgreich! Ein Backup wurde erstellt.\n"
-                              f"Backup-Pfad: {backup_path}\n\n"
-                              "Bitte starten Sie das Programm neu.")
+            messagebox.showinfo("Update", "Update erfolgreich! Bitte starten Sie das Programm neu.")
             
             # Programm beenden
             self.quit_application()
             
         except subprocess.CalledProcessError as e:
-            error_msg = f"Update fehlgeschlagen: {str(e)}"
-            logger.error(error_msg)
-            messagebox.showerror("Fehler", error_msg)
+            messagebox.showerror("Fehler", f"Update fehlgeschlagen: {str(e)}")
         except Exception as e:
-<<<<<<< HEAD
             messagebox.showerror("Fehler", f"Unerwarteter Fehler: {str(e)}")
             
     def save_calibration(self):
@@ -562,11 +574,6 @@ Weboberfläche:
             messagebox.showerror("Fehler", f"Ungültige Eingabe: {str(e)}")
         except Exception as e:
             messagebox.showerror("Fehler", f"Fehler beim Speichern: {str(e)}")
-=======
-            error_msg = f"Unerwarteter Fehler: {str(e)}"
-            logger.error(error_msg)
-            messagebox.showerror("Fehler", error_msg)
->>>>>>> 5ec4887295d416231d885e6cfb7c462acd87b57e
 
 def main():
     try:
