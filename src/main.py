@@ -287,49 +287,56 @@ class WeichensteuerungGUI(tk.Tk):
                   command=self.start_calibration_assistant).pack(pady=5)
         
     def create_automation_tab(self, parent):
-        # Hauptframe mit Padding
-        auto_main = ttk.Frame(parent, padding="5")
-        auto_main.pack(fill=tk.BOTH, expand=True)
+        """Erstellt den Automation-Tab"""
+        frame = ttk.Frame(parent, padding="10")
+        frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
-        # Pattern-Auswahl
-        pattern_frame = ttk.LabelFrame(auto_main, text="Automatik-Muster", padding="10")
+        # Muster-Auswahl
+        pattern_frame = ttk.LabelFrame(frame, text="Automatik-Muster", padding="5")
         pattern_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        # Muster-Liste mit größerer Schrift
-        patterns = [
-            "Muster 1: Links → Rechts",
-            "Muster 2: Rechts → Links",
-            "Muster 3: Alternierend",
-            "Muster 4: Zufällig",
-            "Muster 5: Welle",
-            "Muster 6: Kreuz"
-        ]
+        # Muster definieren
+        self.patterns = {
+            "Links → Rechts": "left_to_right",
+            "Rechts → Links": "right_to_left",
+            "Abwechselnd": "alternate",
+            "Zufällig": "random"
+        }
         
-        self.selected_pattern = tk.StringVar()
-        pattern_list = ttk.Combobox(pattern_frame, textvariable=self.selected_pattern,
-                                  font=('TkDefaultFont', 10), width=30)
-        pattern_list['values'] = patterns
-        pattern_list.set(patterns[0])
-        pattern_list.pack(pady=5)
+        self.pattern_var = tk.StringVar(value="Links → Rechts")
+        pattern_menu = ttk.Combobox(pattern_frame, 
+                                  textvariable=self.pattern_var,
+                                  values=list(self.patterns.keys()),
+                                  state="readonly")
+        pattern_menu.pack(fill=tk.X, padx=5, pady=5)
         
-        # Geschwindigkeit
-        speed_frame = ttk.LabelFrame(pattern_frame, text="Geschwindigkeit", padding="5")
+        # Geschwindigkeits-Slider
+        speed_frame = ttk.LabelFrame(frame, text="Geschwindigkeit", padding="5")
         speed_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        self.automation_speed = tk.DoubleVar(value=1.0)
-        speed_scale = ttk.Scale(speed_frame, from_=0.1, to=2.0, orient=tk.HORIZONTAL,
-                              variable=self.automation_speed, length=300)
+        self.speed_var = tk.DoubleVar(value=1.0)
+        speed_scale = ttk.Scale(speed_frame, 
+                              from_=0.1, 
+                              to=2.0,
+                              variable=self.speed_var,
+                              orient=tk.HORIZONTAL)
         speed_scale.pack(fill=tk.X, padx=5, pady=5)
         
-        # Start/Stop Buttons mit größerer Breite
-        control_frame = ttk.Frame(auto_main)
-        control_frame.pack(fill=tk.X, padx=5, pady=5)
+        # Start/Stop Buttons
+        button_frame = ttk.Frame(frame)
+        button_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        ttk.Button(control_frame, text="Start", width=20,
-                  command=self.start_automation).pack(side=tk.LEFT, padx=5, pady=5)
-        ttk.Button(control_frame, text="Stop", width=20,
-                  command=self.stop_automation).pack(side=tk.LEFT, padx=5, pady=5)
-    
+        self.start_button = ttk.Button(button_frame, 
+                                     text="Start",
+                                     command=self.start_automation)
+        self.start_button.pack(side=tk.LEFT, padx=5)
+        
+        self.stop_button = ttk.Button(button_frame,
+                                    text="Stop",
+                                    command=self.stop_automation,
+                                    state=tk.DISABLED)
+        self.stop_button.pack(side=tk.LEFT, padx=5)
+        
     def create_info_tab(self, parent):
         """Erstellt den Info & Settings Tab"""
         content_frame = ttk.Frame(parent)
@@ -510,19 +517,37 @@ Weboberfläche:
             messagebox.showerror("Fehler", f"Fehler beim Setzen der Position: {str(e)}")
             
     def start_automation(self):
+        """Startet die Automation"""
         try:
-            pattern = self.selected_pattern.get().split(':')[0].strip()
-            speed = self.automation_speed.get()
-            self.automation_controller.set_pattern(pattern)
-            self.automation_controller.set_speed(speed)
-            self.automation_controller.start()
+            # Pattern-Name aus der Auswahl ermitteln
+            pattern_display = self.pattern_var.get()
+            pattern = self.patterns.get(pattern_display)
+            
+            if not pattern:
+                raise ValueError(f"Ungültiges Muster: {pattern_display}")
+            
+            # Automation starten
+            self.automation_controller.start_automation(pattern)
+            
+            # Buttons aktualisieren
+            self.start_button.config(state=tk.DISABLED)
+            self.stop_button.config(state=tk.NORMAL)
+            
         except Exception as e:
+            self.logger.error(f"Fehler beim Starten der Automation: {e}")
             messagebox.showerror("Fehler", f"Fehler beim Starten der Automation: {str(e)}")
-    
+            
     def stop_automation(self):
+        """Stoppt die Automation"""
         try:
-            self.automation_controller.stop()
+            self.automation_controller.stop_automation()
+            
+            # Buttons aktualisieren
+            self.start_button.config(state=tk.NORMAL)
+            self.stop_button.config(state=tk.DISABLED)
+            
         except Exception as e:
+            self.logger.error(f"Fehler beim Stoppen der Automation: {e}")
             messagebox.showerror("Fehler", f"Fehler beim Stoppen der Automation: {str(e)}")
             
     def check_for_updates(self):
