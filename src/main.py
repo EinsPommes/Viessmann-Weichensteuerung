@@ -1,15 +1,32 @@
+import logging
+import tkinter as tk
+from tkinter import ttk, messagebox
+import json
+import os
+import time
+from servokit_controller import ServoKitController
 from pigpio_servo_controller import PiGPIOServoController
+from hall_sensor import HallSensor
+from automation_controller import AutomationController
+from gui import GUI
+from track_map import TrackMap
+
+# Logging konfigurieren
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+from servokit_controller import ServoKitController
 from hall_sensor import HallSensor
 from automation_controller import AutomationController
 from gui import GUI
 from track_map import TrackMap
 import json
 import os
-import tkinter as tk
 import sys
 import subprocess
 import logging
-from pigpio_servo_controller import PiGPIOServoController
 from logging.handlers import RotatingFileHandler
 import time
 import pigpio
@@ -24,7 +41,7 @@ import pigpio
 import subprocess
 import threading
 from datetime import datetime
-from pigpio_servo_controller import PiGPIOServoController
+from pigpio_servo_controller import PiGPIOServoController, PCA9685ServoController
 from automation_controller import AutomationController
 from hall_sensor import HallSensor
 
@@ -67,196 +84,312 @@ import os
 import sys
 import subprocess
 import logging
-from pigpio_servo_controller import PiGPIOServoController
-
-class ServoStatusFrame(ttk.LabelFrame):
-    """Frame für detaillierte Servo-Status-Anzeige"""
-    def __init__(self, parent, servo_id, controller):
-        super().__init__(parent, text=f"Servo {servo_id + 1}")
-        self.servo_id = servo_id
-        self.controller = controller
-        
-        # Status-Anzeige
-        self.status_indicator = tk.Canvas(self, width=20, height=20)
-        self.status_indicator.grid(row=0, column=0, padx=5, pady=5)
-        self.status_light = self.status_indicator.create_oval(2, 2, 18, 18, fill='gray')
-        
-        # Position und Status
-        status_frame = ttk.Frame(self)
-        status_frame.grid(row=0, column=1, padx=5, pady=5, sticky='w')
-        
-        self.position_label = ttk.Label(status_frame, text="Position: --")
-        self.position_label.pack(anchor='w')
-        
-        self.status_label = ttk.Label(status_frame, text="Status: Bereit")
-        self.status_label.pack(anchor='w')
-        
-        # Fehleranzeige
-        self.error_label = ttk.Label(self, text="", foreground='red')
-        self.error_label.grid(row=1, column=0, columnspan=2, padx=5, pady=2, sticky='w')
-        
-    def update_status(self, state):
-        """Aktualisiert die Status-Anzeige"""
-        # Position
-        position = state.get('position', None)
-        if position:
-            self.position_label.config(text=f"Position: {'Links' if position == 'left' else 'Rechts'}")
-        else:
-            self.position_label.config(text="Position: --")
-        
-        # Status und Farbe
-        if state.get('is_moving', False):
-            self.status_indicator.itemconfig(self.status_light, fill='yellow')
-            self.status_label.config(text="Status: In Bewegung")
-        elif state.get('last_error'):
-            self.status_indicator.itemconfig(self.status_light, fill='red')
-            self.status_label.config(text="Status: Fehler")
-            self.error_label.config(text=state['last_error'])
-        else:
-            self.status_indicator.itemconfig(self.status_light, fill='green')
-            self.status_label.config(text="Status: Bereit")
-            self.error_label.config(text="")
+from servokit_controller import ServoKitController
 
 class WeichensteuerungGUI(tk.Tk):
     def __init__(self):
         """Initialisiert die GUI"""
         super().__init__()
-        self.title("Weichensteuerung")
         
         # Logger initialisieren
         self.logger = logging.getLogger('GUI')
+        self.logger.setLevel(logging.DEBUG)
         
-        # Servo-Controller initialisieren
-        self.init_servo_controller()
+        # Fenster-Einstellungen
+        self.title("Weichensteuerung")
+        self.geometry("800x600")
         
-        # Servo-Auswahl für Kalibrierung
-        self.servo_var = tk.StringVar(value="Servo 1")
-        
-        # Erstelle Tab-Control
-        self.tab_control = ttk.Notebook(self)
-        self.tab_control.pack(expand=True, fill=tk.BOTH)
+        try:
+            # Servo Controller initialisieren
+            self.servo_controller = ServoKitController()
+            
+            # Automation Controller initialisieren
+            self.automation_controller = AutomationController(self.servo_controller)
+            
+            # Status-Variablen
+            self.servo_var = tk.StringVar()
+            self.servo_leds = {}  # Canvas-Objekte für LEDs
+            self.position_labels = {}  # Labels für Positionen
+            
+            # Kalibrierungs-Variablen
+            self.current_servo = None
+            self.left_angle = None
+            self.right_angle = None
+            
+            # GUI erstellen
+            self.create_gui()
+            
+            # Status-Update Timer starten
+            self.after(1000, self.update_servo_status)
+            
+            # Test-Bewegung durchführen
+            self.logger.info("Führe Test-Bewegung durch...")
+            self.servo_controller.move_servo(0, 'left')
+            time.sleep(0.5)
+            self.servo_controller.move_servo(0, 'right')
+            time.sleep(0.5)
+            self.servo_controller.move_servo(0, 'left')
+            self.logger.info("Test-Bewegung erfolgreich")
+            
+        except Exception as e:
+            self.logger.error(f"Fehler bei der Initialisierung: {e}")
+            messagebox.showerror("Fehler", 
+                               "Fehler bei der Initialisierung der Weichensteuerung.\n" +
+                               "Bitte prüfen Sie die Verbindung zum Servo-Controller.\n\n" +
+                               f"Fehler: {str(e)}")
+            self.destroy()
+
+    def create_gui(self):
+        """Erstellt die GUI"""
+        # Notebook für Tabs
+        notebook = ttk.Notebook(self)
+        notebook.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # Steuerungs-Tab
-        control_tab = ttk.Frame(self.tab_control)
-        self.tab_control.add(control_tab, text="Steuerung")
+        control_tab = ttk.Frame(notebook)
+        notebook.add(control_tab, text="Steuerung")
         self.create_control_tab(control_tab)
         
-        # Gleiskarten-Tab
-        map_tab = ttk.Frame(self.tab_control)
-        self.tab_control.add(map_tab, text="Gleiskarte")
-        self.create_map_tab(map_tab)
+        # Gleiskarte-Tab
+        track_tab = ttk.Frame(notebook)
+        notebook.add(track_tab, text="Gleiskarte")
+        self.create_track_tab(track_tab)
         
         # Kalibrierungs-Tab
-        config_tab = ttk.Frame(self.tab_control)
-        self.tab_control.add(config_tab, text="Kalibrierung")
-        self.create_calibration_tab(config_tab)
+        calibration_tab = ttk.Frame(notebook)
+        notebook.add(calibration_tab, text="Kalibrierung")
+        self.create_calibration_tab(calibration_tab)
         
         # Automation-Tab
-        automation_tab = ttk.Frame(self.tab_control)
-        self.tab_control.add(automation_tab, text="Automation")
+        automation_tab = ttk.Frame(notebook)
+        notebook.add(automation_tab, text="Automation")
         self.create_automation_tab(automation_tab)
         
         # Info-Tab
-        info_tab = ttk.Frame(self.tab_control)
-        self.tab_control.add(info_tab, text="Info")
+        info_tab = ttk.Frame(notebook)
+        notebook.add(info_tab, text="Info")
         self.create_info_tab(info_tab)
         
-        # Status-Update starten
-        self.update_status()
+        # Fenster-Schließen-Handler
+        self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
     def create_control_tab(self, parent):
         """Erstellt den Steuerungs-Tab"""
         # Hauptframe mit Padding
-        control_frame = ttk.Frame(parent, padding="5")
-        control_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        main_frame = ttk.Frame(parent, padding="10")
+        main_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Erstelle 4x4 Grid für Servos
-        self.servo_frames = {}  # Speichere Frame-Daten für Updates
-        for i in range(16):
-            row = i // 4
-            col = i % 4
-            
-            # Servo-Frame
-            servo_frame = ttk.LabelFrame(control_frame, text=f"Servo {i+1}")
-            servo_frame.grid(row=row, column=col, padx=5, pady=5, sticky=(tk.W, tk.E, tk.N, tk.S))
-            
-            # Status-LED
-            canvas = tk.Canvas(servo_frame, width=20, height=20)
-            canvas.pack(pady=2)
-            led = canvas.create_oval(5, 5, 15, 15, fill='gray')
-            
-            # Positions-Label
-            pos_label = ttk.Label(servo_frame, text="?")
-            pos_label.pack(pady=2)
-            
-            # Buttons
-            btn_frame = ttk.Frame(servo_frame)
-            btn_frame.pack(pady=2)
-            
-            # Command mit Lambda um Servo-ID zu übergeben
-            ttk.Button(btn_frame, text="Links", 
-                      command=lambda id=i: self.move_servo(id, 'left')).pack(side=tk.LEFT, padx=2)
-            ttk.Button(btn_frame, text="Rechts",
-                      command=lambda id=i: self.move_servo(id, 'right')).pack(side=tk.LEFT, padx=2)
-            
-            # Speichere Frame-Daten für Updates
-            self.servo_frames[i] = {
-                'frame': servo_frame,
-                'canvas': canvas,
-                'led': led,
-                'pos_label': pos_label
-            }
-            
-        # Konfiguriere Grid
-        for i in range(4):
-            control_frame.columnconfigure(i, weight=1)
-            control_frame.rowconfigure(i, weight=1)
+        # Servo Status Frame
+        status_frame = ttk.LabelFrame(main_frame, text="Servo Status", padding="10")
+        status_frame.pack(fill=tk.X, padx=5, pady=(0,10))
+        
+        # Grid für Servo-Status (4x4)
+        for row in range(4):
+            for col in range(4):
+                servo_id = row * 4 + col
+                frame = ttk.Frame(status_frame)
+                frame.grid(row=row, column=col, padx=5, pady=2)
+                
+                # Status-LED
+                canvas = tk.Canvas(frame, width=15, height=15)
+                canvas.pack(side=tk.TOP, pady=(0,2))
+                self.servo_leds[str(servo_id)] = {'canvas': canvas, 'led': canvas.create_oval(2, 2, 13, 13, fill='orange')}
+                
+                # Servo-Label
+                ttk.Label(frame, text=f"Servo {servo_id + 1}").pack(side=tk.TOP)
+                
+                # Position-Label
+                self.position_labels[str(servo_id)] = ttk.Label(frame, text="---")
+                self.position_labels[str(servo_id)].pack(side=tk.TOP)
+        
+        # Servo Steuerung Frame
+        control_frame = ttk.LabelFrame(main_frame, text="Servo Steuerung", padding="10")
+        control_frame.pack(fill=tk.X, padx=5)
+        
+        # Servo-Auswahl und Steuerung in einer Reihe
+        ctrl_row = ttk.Frame(control_frame)
+        ctrl_row.pack(fill=tk.X)
+        
+        # Servo Auswahl
+        select_frame = ttk.Frame(ctrl_row)
+        select_frame.pack(side=tk.LEFT, padx=(0,20))
+        ttk.Label(select_frame, text="Servo:").pack(side=tk.LEFT, padx=(0,5))
+        servo_select = ttk.Combobox(select_frame, 
+                                  textvariable=self.servo_var,
+                                  values=[f"Servo {i+1}" for i in range(16)],
+                                  state="readonly",
+                                  width=10)
+        servo_select.pack(side=tk.LEFT)
+        servo_select.set("Servo 1")  # Standardauswahl
+        
+        # Steuerungsbuttons
+        btn_frame = ttk.Frame(ctrl_row)
+        btn_frame.pack(side=tk.RIGHT)
+        
+        ttk.Button(btn_frame, 
+                  text="Links",
+                  width=10,
+                  command=lambda: self.move_servo(int(self.servo_var.get().split()[1]) - 1, 'left')).pack(side=tk.LEFT, padx=5)
+                  
+        ttk.Button(btn_frame,
+                  text="Rechts",
+                  width=10,
+                  command=lambda: self.move_servo(int(self.servo_var.get().split()[1]) - 1, 'right')).pack(side=tk.LEFT, padx=5)
 
-    def update_status(self):
+    def update_servo_status(self):
         """Aktualisiert den Status aller Servos"""
         try:
-            # Aktualisiere Status-LEDs
-            for servo_id in range(16):
-                frame_data = self.servo_frames.get(servo_id)
-                if not frame_data:
+            # Aktualisiere Status für jeden Servo
+            for servo_id in range(16):  # Maximal 16 Servos pro Board
+                if str(servo_id) not in self.servo_leds:
                     continue
                     
                 # Hole Servo-Status
-                state = self.servo_controller.servo_states.get(servo_id, {})
-                position = state.get('position')
-                last_move = state.get('last_move', 0)
-                error = state.get('error', False)
-                
-                # Aktualisiere Positions-Label
-                if position in ['left', 'right']:
-                    frame_data['pos_label'].config(text=position.capitalize())
-                else:
-                    frame_data['pos_label'].config(text='?')
+                state = self.servo_controller.servo_states.get(str(servo_id))
+                if not state:
+                    continue
+                    
+                frame_data = self.servo_leds[str(servo_id)]
                 
                 # Aktualisiere LED-Farbe
-                if error:
+                if state.get('error', False):
                     frame_data['canvas'].itemconfig(frame_data['led'], fill='red')
-                elif time.time() - last_move < 0.5:  # Bewegung in den letzten 0.5 Sekunden
+                elif time.time() - state.get('last_move', 0) < 0.5:  # Bewegung in den letzten 0.5 Sekunden
                     frame_data['canvas'].itemconfig(frame_data['led'], fill='yellow')
-                elif position in ['left', 'right']:  # Position bekannt
+                elif state.get('position') in ['left', 'right']:  # Position bekannt
                     frame_data['canvas'].itemconfig(frame_data['led'], fill='green')
                 else:
                     frame_data['canvas'].itemconfig(frame_data['led'], fill='gray')
-            
+                    
+                # Aktualisiere Positions-Label
+                if str(servo_id) in self.position_labels:
+                    position = state.get('position', '')
+                    if position in ['left', 'right']:
+                        self.position_labels[str(servo_id)].config(text=position.capitalize())
+                    else:
+                        self.position_labels[str(servo_id)].config(text='?')
+                        
         except Exception as e:
-            self.logger.error(f"Fehler beim Aktualisieren des Status: {e}")
+            self.logger.error(f"Fehler beim Aktualisieren des Servo-Status: {e}")
             
-        # Plane nächste Aktualisierung
-        self.after(500, self.update_status)
-        
-    def move_servo(self, servo_id, direction):
-        """Bewegt einen Servo in die angegebene Richtung"""
+        # Plane nächstes Update
+        self.after(500, self.update_servo_status)
+
+    def adjust_left(self, delta):
+        """Passt den linken Winkel an"""
         try:
-            success = self.servo_controller.move_servo(servo_id, direction)
-            if not success:
-                self.logger.error(f"Fehler beim Bewegen von Servo {servo_id}")
+            self.logger.debug(f"Passe linken Winkel an: aktuell={self.left_angle}, delta={delta}")
+            
+            # Berechne neuen Winkel
+            new_angle = float(self.left_angle) + delta
+            
+            # Prüfe Grenzen
+            if new_angle < 0 or new_angle > 180:
+                self.logger.debug(f"Neuer Winkel {new_angle}° außerhalb der Grenzen")
+                return
+                
+            # Aktualisiere Winkel
+            self.left_angle = float(new_angle)  # Explizit als float speichern
+            self.logger.debug(f"Neuer linker Winkel: {self.left_angle}°")
+            
+            # Aktualisiere Label
+            if hasattr(self, 'left_angle_label'):
+                self.left_angle_label['text'] = f"{int(self.left_angle)}°"
+            
+            # Bewege Servo
+            if self.current_servo < 8:
+                self.servo_controller.kit1.servo[self.current_servo].angle = self.left_angle
+            else:
+                self.servo_controller.kit2.servo[self.current_servo-8].angle = self.left_angle
+                
         except Exception as e:
-            self.logger.error(f"Fehler beim Bewegen von Servo {servo_id}: {str(e)}")
+            self.logger.error(f"Fehler beim Anpassen des linken Winkels: {e}")
+            messagebox.showerror("Fehler", str(e))
+            
+    def adjust_right(self, delta):
+        """Passt den rechten Winkel an"""
+        try:
+            self.logger.debug(f"Passe rechten Winkel an: aktuell={self.right_angle}, delta={delta}")
+            
+            # Berechne neuen Winkel
+            new_angle = float(self.right_angle) + delta
+            
+            # Prüfe Grenzen
+            if new_angle < 0 or new_angle > 180:
+                self.logger.debug(f"Neuer Winkel {new_angle}° außerhalb der Grenzen")
+                return
+                
+            # Aktualisiere Winkel
+            self.right_angle = float(new_angle)  # Explizit als float speichern
+            self.logger.debug(f"Neuer rechter Winkel: {self.right_angle}°")
+            
+            # Aktualisiere Label
+            if hasattr(self, 'right_angle_label'):
+                self.right_angle_label['text'] = f"{int(self.right_angle)}°"
+            
+            # Bewege Servo
+            if self.current_servo < 8:
+                self.servo_controller.kit1.servo[self.current_servo].angle = self.right_angle
+            else:
+                self.servo_controller.kit2.servo[self.current_servo-8].angle = self.right_angle
+                
+        except Exception as e:
+            self.logger.error(f"Fehler beim Anpassen des rechten Winkels: {e}")
+            messagebox.showerror("Fehler", str(e))
+            
+    def save_calibration(self):
+        """Speichert die Kalibrierung"""
+        try:
+            self.logger.debug(f"Starte Speicherung der Kalibrierung für Servo {self.current_servo}")
+            
+            # Prüfe ob die Winkel gültig sind
+            if not hasattr(self, 'left_angle') or not hasattr(self, 'right_angle'):
+                raise ValueError("Keine Winkel zum Speichern vorhanden")
+                
+            # Prüfe ob die Winkel numerisch sind
+            try:
+                left = float(self.left_angle)
+                right = float(self.right_angle)
+            except (ValueError, TypeError):
+                raise ValueError("Ungültige Winkel-Werte")
+                
+            # Prüfe Grenzen
+            if left < 0 or left > 180 or right < 0 or right > 180:
+                raise ValueError("Winkel müssen zwischen 0° und 180° liegen")
+                
+            # Erstelle Konfiguration
+            servo_config = {
+                'left_angle': left,
+                'right_angle': right,
+                'speed': 0.5  # Fester Wert
+            }
+            
+            self.logger.debug(f"Neue Konfiguration: {servo_config}")
+            
+            # Aktualisiere Konfiguration im Controller
+            self.servo_controller.config[str(self.current_servo)] = servo_config
+            
+            # Speichere in Datei
+            self.logger.debug("Speichere Konfiguration in Datei...")
+            self.servo_controller.save_config()
+            self.logger.debug("Konfiguration erfolgreich gespeichert")
+            
+            # Schließe Fenster
+            if hasattr(self, 'cal_window'):
+                self.cal_window.destroy()
+            
+            # Bestätige Speicherung
+            messagebox.showinfo("Erfolg", 
+                f"Kalibrierung für Servo {self.current_servo + 1} gespeichert:\n" +
+                f"Linker Anschlag: {int(left)}°\n" +
+                f"Rechter Anschlag: {int(right)}°")
+            
+        except Exception as e:
+            self.logger.error(f"Fehler beim Speichern der Kalibrierung: {e}")
+            self.logger.error(f"Debug Info - Attribute: left_angle={hasattr(self, 'left_angle')}, " +
+                          f"right_angle={hasattr(self, 'right_angle')}, " +
+                          f"current_servo={hasattr(self, 'current_servo')}")
+            messagebox.showerror("Fehler", str(e))
             
     def create_map_tab(self, parent):
         # Gleiskarte erstellen
@@ -264,18 +397,14 @@ class WeichensteuerungGUI(tk.Tk):
         
     def create_calibration_tab(self, parent):
         """Erstellt den Kalibrierungs-Tab"""
-        frame = ttk.Frame(parent, padding="10")
+        frame = ttk.Frame(parent)
         frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
-        # Kalibrierungsassistent
-        assistant_frame = ttk.LabelFrame(frame, text="Kalibrierungsassistent", padding="5")
-        assistant_frame.pack(fill=tk.X, padx=5, pady=5)
-        
         # Servo-Auswahl
-        select_frame = ttk.Frame(assistant_frame)
+        select_frame = ttk.Frame(frame)
         select_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        ttk.Label(select_frame, text="Servo:").pack(side=tk.LEFT, padx=5)
+        ttk.Label(select_frame, text="Servo auswählen:").pack(side=tk.LEFT, padx=5)
         servo_select = ttk.Combobox(select_frame, 
                                   textvariable=self.servo_var,
                                   values=[f"Servo {i+1}" for i in range(16)],
@@ -283,68 +412,131 @@ class WeichensteuerungGUI(tk.Tk):
                                   state="readonly")
         servo_select.pack(side=tk.LEFT, padx=5)
         
-        ttk.Button(assistant_frame, text="Assistent starten",
-                  command=self.start_calibration_assistant).pack(pady=5)
+        # Start-Button
+        ttk.Button(frame, text="Kalibrierung starten",
+                  command=self.show_calibration_dialog).pack(pady=10)
+                  
+    def show_calibration_dialog(self):
+        """Zeigt den Kalibrierungsdialog"""
+        try:
+            # Hole Servo-Nummer
+            servo_str = self.servo_var.get()
+            if not servo_str:
+                messagebox.showwarning("Warnung", "Bitte wählen Sie einen Servo aus")
+                return
+                
+            self.current_servo = int(servo_str.split()[1]) - 1  # "Servo 1" -> 0
+            
+            # Prüfe ob Servo verfügbar
+            if self.current_servo >= 8 and not self.servo_controller.dual_board:
+                raise Exception(f"Servo {self.current_servo} nicht verfügbar (kein zweites Board)")
+            
+            # Hole aktuelle Konfiguration oder setze Standardwerte
+            config = self.servo_controller.config.get(str(self.current_servo), {})
+            self.left_angle = float(config.get('left_angle', 30.0))   # Standardwert 30.0° für links
+            self.right_angle = float(config.get('right_angle', 150.0))  # Standardwert 150.0° für rechts
+            
+            self.logger.info(f"Kalibrierung für Servo {self.current_servo + 1}: Links={self.left_angle}°, Rechts={self.right_angle}°")
+            
+            # Erstelle Kalibrierungsfenster
+            self.cal_window = tk.Toplevel(self)
+            self.cal_window.title(f"Kalibrierung Servo {self.current_servo + 1}")
+            self.cal_window.geometry("400x300")  # Größeres Fenster
+            self.cal_window.resizable(False, False)
+            
+            # Hauptframe mit Padding
+            main_frame = ttk.Frame(self.cal_window, padding="20")
+            main_frame.pack(fill=tk.BOTH, expand=True)
+            
+            # Info-Label
+            ttk.Label(main_frame, 
+                     text="Stellen Sie die Positionen mit den Pfeiltasten ein",
+                     wraplength=350,
+                     justify=tk.CENTER).pack(pady=(0,20))
+            
+            # Linke Position
+            left_frame = ttk.LabelFrame(main_frame, text="Linke Position", padding="10")
+            left_frame.pack(fill=tk.X, pady=(0,10))
+            
+            # Winkel-Anzeige und Steuerung in einer Reihe
+            left_ctrl = ttk.Frame(left_frame)
+            left_ctrl.pack(fill=tk.X)
+            ttk.Label(left_ctrl, text="Winkel:", width=8).pack(side=tk.LEFT)
+            
+            # Label für linken Winkel
+            self.left_angle_label = ttk.Label(left_ctrl, text=f"{int(self.left_angle)}°", width=5)
+            self.left_angle_label.pack(side=tk.LEFT)
+            
+            # Buttons rechtsbündig
+            left_btn_frame = ttk.Frame(left_ctrl)
+            left_btn_frame.pack(side=tk.RIGHT)
+            ttk.Button(left_btn_frame, text="◄◄", width=3, command=lambda: self.adjust_left(-10)).pack(side=tk.LEFT, padx=1)
+            ttk.Button(left_btn_frame, text="◄", width=3, command=lambda: self.adjust_left(-1)).pack(side=tk.LEFT, padx=1)
+            ttk.Button(left_btn_frame, text="►", width=3, command=lambda: self.adjust_left(1)).pack(side=tk.LEFT, padx=1)
+            ttk.Button(left_btn_frame, text="►►", width=3, command=lambda: self.adjust_left(10)).pack(side=tk.LEFT, padx=1)
+            
+            # Rechte Position
+            right_frame = ttk.LabelFrame(main_frame, text="Rechte Position", padding="10")
+            right_frame.pack(fill=tk.X, pady=(0,10))
+            
+            # Winkel-Anzeige und Steuerung in einer Reihe
+            right_ctrl = ttk.Frame(right_frame)
+            right_ctrl.pack(fill=tk.X)
+            ttk.Label(right_ctrl, text="Winkel:", width=8).pack(side=tk.LEFT)
+            
+            # Label für rechten Winkel
+            self.right_angle_label = ttk.Label(right_ctrl, text=f"{int(self.right_angle)}°", width=5)
+            self.right_angle_label.pack(side=tk.LEFT)
+            
+            # Buttons rechtsbündig
+            right_btn_frame = ttk.Frame(right_ctrl)
+            right_btn_frame.pack(side=tk.RIGHT)
+            ttk.Button(right_btn_frame, text="◄◄", width=3, command=lambda: self.adjust_right(-10)).pack(side=tk.LEFT, padx=1)
+            ttk.Button(right_btn_frame, text="◄", width=3, command=lambda: self.adjust_right(-1)).pack(side=tk.LEFT, padx=1)
+            ttk.Button(right_btn_frame, text="►", width=3, command=lambda: self.adjust_right(1)).pack(side=tk.LEFT, padx=1)
+            ttk.Button(right_btn_frame, text="►►", width=3, command=lambda: self.adjust_right(10)).pack(side=tk.LEFT, padx=1)
+            
+            # Speichern Button
+            save_frame = ttk.Frame(main_frame)
+            save_frame.pack(fill=tk.X, pady=10)
+            ttk.Button(save_frame, 
+                      text="Einstellungen speichern",
+                      command=self.save_calibration).pack(expand=True)
+            
+            # Setze Servo auf Mittelposition
+            middle_angle = (self.left_angle + self.right_angle) / 2
+            self.logger.info(f"Setze Servo {self.current_servo} auf Mittelposition ({middle_angle}°)")
+            if self.current_servo < 8:
+                self.servo_controller.kit1.servo[self.current_servo].angle = middle_angle
+            else:
+                self.servo_controller.kit2.servo[self.current_servo-8].angle = middle_angle
+            
+            # Mache Fenster modal
+            self.cal_window.transient(self)
+            self.cal_window.grab_set()
+                
+        except Exception as e:
+            self.logger.error(f"Fehler beim Öffnen des Kalibrierungsdialogs: {e}")
+            messagebox.showerror("Fehler", str(e))
+            if hasattr(self, 'cal_window'):
+                self.cal_window.destroy()
+                
+    def create_track_tab(self, parent):
+        """Erstellt den Gleiskarten-Tab"""
+        # Hauptframe
+        main_frame = ttk.Frame(parent)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-    def create_automation_tab(self, parent):
-        """Erstellt den Automation-Tab"""
-        frame = ttk.Frame(parent, padding="10")
-        frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        
-        # Muster-Auswahl
-        pattern_frame = ttk.LabelFrame(frame, text="Automatik-Muster", padding="5")
-        pattern_frame.pack(fill=tk.X, padx=5, pady=5)
-        
-        # Muster definieren
-        self.patterns = {
-            "Links → Rechts": "left_to_right",
-            "Rechts → Links": "right_to_left",
-            "Abwechselnd": "alternate",
-            "Zufällig": "random"
-        }
-        
-        self.pattern_var = tk.StringVar(value="Links → Rechts")
-        pattern_menu = ttk.Combobox(pattern_frame, 
-                                  textvariable=self.pattern_var,
-                                  values=list(self.patterns.keys()),
-                                  state="readonly")
-        pattern_menu.pack(fill=tk.X, padx=5, pady=5)
-        
-        # Geschwindigkeits-Slider
-        speed_frame = ttk.LabelFrame(frame, text="Geschwindigkeit", padding="5")
-        speed_frame.pack(fill=tk.X, padx=5, pady=5)
-        
-        self.speed_var = tk.DoubleVar(value=1.0)
-        speed_scale = ttk.Scale(speed_frame, 
-                              from_=0.1, 
-                              to=2.0,
-                              variable=self.speed_var,
-                              orient=tk.HORIZONTAL)
-        speed_scale.pack(fill=tk.X, padx=5, pady=5)
-        
-        # Start/Stop Buttons
-        button_frame = ttk.Frame(frame)
-        button_frame.pack(fill=tk.X, padx=5, pady=5)
-        
-        self.start_button = ttk.Button(button_frame, 
-                                     text="Start",
-                                     command=self.start_automation)
-        self.start_button.pack(side=tk.LEFT, padx=5)
-        
-        self.stop_button = ttk.Button(button_frame,
-                                    text="Stop",
-                                    command=self.stop_automation,
-                                    state=tk.DISABLED)
-        self.stop_button.pack(side=tk.LEFT, padx=5)
-        
-    def create_info_tab(self, parent):
+        # Platzhalter-Label
+        ttk.Label(main_frame, text="Gleiskarte wird in zukünftiger Version implementiert").pack(pady=20)
+
+    def create_info_tab(self, parent): 
         """Erstellt den Info & Settings Tab"""
         content_frame = ttk.Frame(parent)
         content_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
         info_text = """Entwickelt von: EinsPommes
 Website: Chill-zone.xyz
-
 Version: 1.2
  2025 EinsPommes
 
@@ -516,40 +708,6 @@ Weboberfläche:
         except Exception as e:
             messagebox.showerror("Fehler", f"Fehler beim Setzen der Position: {str(e)}")
             
-    def start_automation(self):
-        """Startet die Automation"""
-        try:
-            # Pattern-Name aus der Auswahl ermitteln
-            pattern_display = self.pattern_var.get()
-            pattern = self.patterns.get(pattern_display)
-            
-            if not pattern:
-                raise ValueError(f"Ungültiges Muster: {pattern_display}")
-            
-            # Automation starten
-            self.automation_controller.start_automation(pattern)
-            
-            # Buttons aktualisieren
-            self.start_button.config(state=tk.DISABLED)
-            self.stop_button.config(state=tk.NORMAL)
-            
-        except Exception as e:
-            self.logger.error(f"Fehler beim Starten der Automation: {e}")
-            messagebox.showerror("Fehler", f"Fehler beim Starten der Automation: {str(e)}")
-            
-    def stop_automation(self):
-        """Stoppt die Automation"""
-        try:
-            self.automation_controller.stop_automation()
-            
-            # Buttons aktualisieren
-            self.start_button.config(state=tk.NORMAL)
-            self.stop_button.config(state=tk.DISABLED)
-            
-        except Exception as e:
-            self.logger.error(f"Fehler beim Stoppen der Automation: {e}")
-            messagebox.showerror("Fehler", f"Fehler beim Stoppen der Automation: {str(e)}")
-            
     def check_for_updates(self):
         """Prüft auf Updates und installiert sie bei Bedarf"""
         try:
@@ -565,8 +723,8 @@ Weboberfläche:
             if status.stdout.strip():
                 # Es gibt lokale Änderungen
                 if messagebox.askyesno("Lokale Änderungen", 
-                    "Es gibt lokale Änderungen. Möchten Sie diese erst speichern?\n"
-                    "- Ja: Änderungen werden committet\n"
+                    "Es gibt lokale Änderungen. Möchten Sie diese erst speichern?\n" +
+                    "- Ja: Änderungen werden committet\n" +
                     "- Nein: Änderungen werden verworfen"):
                     # Commit lokale Änderungen
                     subprocess.run(['git', 'add', '.'], cwd=project_dir)
@@ -592,7 +750,7 @@ Weboberfläche:
                 if diff.stdout.strip():
                     # Es gibt Updates
                     if messagebox.askyesno("Updates verfügbar", 
-                                         "Es sind Updates verfügbar. Möchten Sie diese jetzt installieren?\n"
+                                         "Es sind Updates verfügbar. Möchten Sie diese jetzt installieren?\n" +
                                          "Das Programm wird danach neu gestartet."):
                         # Führe git pull aus
                         pull_result = subprocess.run(['git', 'pull', 'origin', 'main'],
@@ -664,10 +822,15 @@ Weboberfläche:
         else:
             messagebox.showerror("Fehler", "Fehler beim Speichern der Konfiguration")
             
-    def update_servo_status(self, servo_id, position=None):
+    def update_servo_status(self, servo_id=None, position=None):
         """Aktualisiert die Statusanzeige für einen Servo"""
         try:
             if not hasattr(self, 'status_labels'):
+                return
+                
+            if servo_id is None:
+                for i in range(16):
+                    self.update_servo_status(i)
                 return
                 
             if servo_id not in self.status_labels:
@@ -694,60 +857,51 @@ Weboberfläche:
                 
     def create_servo_frame(self, parent, servo_id):
         """Erstellt einen Frame für einen Servo mit Steuerung und Status"""
-        frame = ttk.LabelFrame(parent, text=f"Servo {servo_id}")
+        servo_frame = ttk.LabelFrame(parent, text=f"Servo {servo_id + 1}")
         
-        # Status-LED und Position
-        status_frame = ttk.Frame(frame)
+        # Status-Anzeige
+        status_frame = ttk.Frame(servo_frame)
         status_frame.pack(fill=tk.X, padx=5, pady=2)
         
-        # LED-Canvas
+        # LED
         canvas = tk.Canvas(status_frame, width=20, height=20)
         canvas.pack(side=tk.LEFT, padx=2)
-        led = canvas.create_oval(2, 2, 18, 18, fill='gray')
+        led = canvas.create_oval(5, 5, 15, 15, fill='gray')
         
         # Positions-Label
         pos_label = ttk.Label(status_frame, text="--")
         pos_label.pack(side=tk.LEFT, padx=5)
         
         # Steuerungsbuttons
-        btn_frame = ttk.Frame(frame)
-        btn_frame.pack(fill=tk.X, padx=5, pady=2)
+        button_frame = ttk.Frame(servo_frame)
+        button_frame.pack(fill=tk.X, padx=5, pady=2)
         
-        # Servo-IDs sind 1-basiert in der GUI, aber 0-basiert im Controller
-        btn_left = ttk.Button(btn_frame, text="Links", 
-                            command=lambda s=servo_id: self.move_servo(s-1, "left"))
-        btn_left.pack(side=tk.LEFT, padx=2, expand=True, fill=tk.X)
+        # Links-Button
+        left_btn = ttk.Button(button_frame, text="←", width=3,
+                            command=lambda: self.move_servo(servo_id, 'left'))
+        left_btn.pack(side=tk.LEFT, padx=2)
         
-        btn_right = ttk.Button(btn_frame, text="Rechts", 
-                             command=lambda s=servo_id: self.move_servo(s-1, "right"))
-        btn_right.pack(side=tk.LEFT, padx=2, expand=True, fill=tk.X)
+        # Rechts-Button
+        right_btn = ttk.Button(button_frame, text="→", width=3,
+                            command=lambda: self.move_servo(servo_id, 'right'))
+        right_btn.pack(side=tk.LEFT, padx=2)
         
-        # Speichere Frame-Daten
-        self.servo_frames[servo_id] = {
-            'frame': frame,
-            'canvas': canvas,
-            'led': led,
-            'pos_label': pos_label,
-            'btn_left': btn_left,
-            'btn_right': btn_right
-        }
-        
-        return frame
+        return servo_frame, canvas, led, pos_label
 
     def update_status(self):
         """Aktualisiert den Status aller Servos"""
         try:
             # Aktualisiere Status-LEDs
-            for servo_id in range(16):
-                frame_data = self.servo_frames.get(servo_id)
+            for servo_id in range(16):  # 16 Servos
+                frame_data = self.servo_frames[servo_id]
                 if not frame_data:
                     continue
                     
                 # Hole Servo-Status
-                state = self.servo_controller.servo_states.get(servo_id, {})
+                state = self.servo_controller.servo_states[servo_id]
+                
+                # Hole Position vom Controller
                 position = state.get('position')
-                last_move = state.get('last_move', 0)
-                error = state.get('error', False)
                 
                 # Aktualisiere Positions-Label
                 if position in ['left', 'right']:
@@ -756,9 +910,9 @@ Weboberfläche:
                     frame_data['pos_label'].config(text='?')
                 
                 # Aktualisiere LED-Farbe
-                if error:
+                if state['error']:
                     frame_data['canvas'].itemconfig(frame_data['led'], fill='red')
-                elif time.time() - last_move < 0.5:  # Bewegung in den letzten 0.5 Sekunden
+                elif time.time() - state['last_move'] < 0.5:  # Bewegung in den letzten 0.5 Sekunden
                     frame_data['canvas'].itemconfig(frame_data['led'], fill='yellow')
                 elif position in ['left', 'right']:  # Position bekannt
                     frame_data['canvas'].itemconfig(frame_data['led'], fill='green')
@@ -771,187 +925,292 @@ Weboberfläche:
         # Plane nächste Aktualisierung
         self.after(500, self.update_status)
         
-    def start_calibration_assistant(self):
-        """Startet den Kalibrierungsassistenten"""
-        try:
-            # Hole ausgewählten Servo
-            servo_id = int(self.servo_var.get().split()[1]) - 1
-            self.current_servo = servo_id
-            
-            # Erstelle neues Fenster
-            self.window = tk.Toplevel(self)
-            self.window.title("Kalibrierungsassistent")
-            self.window.geometry("400x300")
-            
-            # Erstelle Widgets
-            frame = ttk.Frame(self.window, padding="10")
-            frame.pack(fill=tk.BOTH, expand=True)
-            
-            # Info-Label
-            self.info_label = ttk.Label(frame, text="Stellen Sie den linken Anschlag ein\n"
-                                                  "Benutzen Sie die Pfeiltasten zum Einstellen\n"
-                                                  "Klicken Sie auf 'Position übernehmen' wenn fertig")
-            self.info_label.pack(pady=10)
-            
-            # Aktueller Winkel
-            angle_frame = ttk.Frame(frame)
-            angle_frame.pack(pady=5)
-            ttk.Label(angle_frame, text="Aktueller Winkel: ").pack(side=tk.LEFT)
-            self.angle_label = ttk.Label(angle_frame, text="90°")
-            self.angle_label.pack(side=tk.LEFT)
-            
-            # Anzeige der gespeicherten Werte
-            values_frame = ttk.Frame(frame)
-            values_frame.pack(pady=5)
-            ttk.Label(values_frame, text="Links: ").grid(row=0, column=0, padx=5)
-            self.left_value = ttk.Label(values_frame, text="--")
-            self.left_value.grid(row=0, column=1, padx=5)
-            ttk.Label(values_frame, text="Rechts: ").grid(row=0, column=2, padx=5)
-            self.right_value = ttk.Label(values_frame, text="--")
-            self.right_value.grid(row=0, column=3, padx=5)
-            
-            # Steuerungsbuttons
-            ctrl_frame = ttk.Frame(frame)
-            ctrl_frame.pack(pady=10)
-            
-            # Fein-Einstellung (1°)
-            ttk.Button(ctrl_frame, text="◄", command=lambda: self.adjust_angle(-1)).grid(row=0, column=0, padx=2)
-            ttk.Button(ctrl_frame, text="►", command=lambda: self.adjust_angle(1)).grid(row=0, column=1, padx=2)
-            
-            # Grob-Einstellung (10°)
-            ttk.Button(ctrl_frame, text="◄◄", command=lambda: self.adjust_angle(-10)).grid(row=0, column=2, padx=2)
-            ttk.Button(ctrl_frame, text="►►", command=lambda: self.adjust_angle(10)).grid(row=0, column=3, padx=2)
-            
-            # Position übernehmen
-            ttk.Button(frame, text="Position übernehmen", 
-                      command=self.set_position).pack(pady=10)
-            
-            # Initialisierung
-            self.current_angle = 90  # Startposition
-            self.config = {}  # Speicher für die Konfiguration
-            self.step = 1  # Schritt 1: Linker Anschlag
-            
-            # Setze Servo auf 90 Grad
-            self.servo_controller.set_servo_angle(servo_id, 90)
-            
-        except Exception as e:
-            messagebox.showerror("Fehler", f"Fehler beim Starten des Assistenten: {str(e)}")
-            if hasattr(self, 'window'):
-                self.window.destroy()
-
-    def adjust_angle(self, delta):
-        """Passt den Winkel an"""
-        try:
-            # Berechne neuen Winkel
-            new_angle = round(self.current_angle + delta)  # Runde auf ganze Zahlen
-            
-            # Prüfe Grenzen
-            if not (0 <= new_angle <= 180):
-                return
-                
-            # Setze neuen Winkel
-            self.current_angle = new_angle
-            self.servo_controller.set_servo_angle(self.current_servo, new_angle)
-            self.angle_label.config(text=f"{new_angle}°")
-            
-        except Exception as e:
-            messagebox.showerror("Fehler", f"Fehler beim Anpassen des Winkels: {str(e)}")
-            
-    def set_position(self):
-        """Übernimmt die aktuelle Position"""
-        try:
-            if self.step == 1:
-                # Linke Position speichern
-                self.config['left_angle'] = self.current_angle
-                self.left_value.config(text=f"{self.current_angle}°")
-                self.step = 2
-                
-                # Fahre wieder auf 90 Grad
-                self.current_angle = 90
-                self.servo_controller.set_servo_angle(self.current_servo, 90)
-                self.angle_label.config(text=f"{self.current_angle}°")
-                
-                self.info_label.config(text="Stellen Sie den rechten Anschlag ein\n"
-                                          "Benutzen Sie die Pfeiltasten zum Einstellen\n"
-                                          "Klicken Sie auf 'Position übernehmen' wenn fertig")
-                
-            elif self.step == 2:
-                # Rechte Position speichern
-                self.config['right_angle'] = self.current_angle
-                self.right_value.config(text=f"{self.current_angle}°")
-                
-                # Speichere Konfiguration
-                try:
-                    success = self.servo_controller.set_servo_config(self.current_servo, {
-                        'left_angle': self.config['left_angle'],
-                        'right_angle': self.config['right_angle'],
-                        'speed': 0.1  # Langsamere Geschwindigkeit
-                    })
-                    
-                    if success:
-                        messagebox.showinfo("Erfolg", 
-                                          f"Kalibrierung erfolgreich gespeichert!\n"
-                                          f"Linker Anschlag: {self.config['left_angle']}°\n"
-                                          f"Rechter Anschlag: {self.config['right_angle']}°")
-                        self.window.destroy()
-                    else:
-                        messagebox.showerror("Fehler", "Fehler beim Speichern der Kalibrierung")
-                except Exception as e:
-                    messagebox.showerror("Fehler", f"Fehler beim Speichern: {str(e)}")
-                
-        except Exception as e:
-            messagebox.showerror("Fehler", f"Fehler beim Setzen der Position: {str(e)}")
-            
-    def run(self):
-        """Startet den Assistenten"""
-        self.window.grab_set()  # Modal
-        self.window.wait_window()
-        
     def init_servo_controller(self):
         """Initialisiert den Servo-Controller"""
         try:
-            # Initialisiere pigpio
-            self.pi = pigpio.pi()
-            if not self.pi.connected:
-                raise ConnectionError("Konnte nicht mit pigpio daemon verbinden")
-                
-            # GPIO-Pin-Zuordnung entsprechend der Tabelle
-            servo_pins = [
-                17,  # Servo 1  - GPIO 17 (Pin 11)
-                18,  # Servo 2  - GPIO 18 (Pin 12)
-                27,  # Servo 3  - GPIO 27 (Pin 13)
-                22,  # Servo 4  - GPIO 22 (Pin 15)
-                23,  # Servo 5  - GPIO 23 (Pin 16)
-                24,  # Servo 6  - GPIO 24 (Pin 18)
-                25,  # Servo 7  - GPIO 25 (Pin 22)
-                4,   # Servo 8  - GPIO 4  (Pin 7)
-                5,   # Servo 9  - GPIO 5  (Pin 29)
-                6,   # Servo 10 - GPIO 6  (Pin 31)
-                13,  # Servo 11 - GPIO 13 (Pin 33)
-                19,  # Servo 12 - GPIO 19 (Pin 35)
-                26,  # Servo 13 - GPIO 26 (Pin 37)
-                16,  # Servo 14 - GPIO 16 (Pin 36)
-                20,  # Servo 15 - GPIO 20 (Pin 38)
-                21   # Servo 16 - GPIO 21 (Pin 40)
-            ]
+            self.logger.info("Initialisiere Servo-Controller...")
+            self.servo_controller = ServoKitController()
+            self.logger.info("Servo-Controller erfolgreich initialisiert")
             
-            # Initialisiere Servo-Controller
-            self.servo_controller = PiGPIOServoController(
-                self.pi, 
-                servo_pins,
-                config_file='config.json'
-            )
-            
-            # Automation-Controller initialisieren
-            self.automation_controller = AutomationController(self.servo_controller)
-            
-            # Hall-Sensor initialisieren
-            self.hall_sensor = HallSensor()
+            # Test-Bewegung durchführen
+            self.logger.info("Führe Test-Bewegung durch...")
+            success = self.servo_controller.move_servo(0, 'left')
+            if success:
+                self.logger.info("Test-Bewegung erfolgreich")
+            else:
+                self.logger.error("Test-Bewegung fehlgeschlagen")
             
         except Exception as e:
-            self.logger.error(f"Fehler beim Initialisieren: {e}")
-            messagebox.showerror("Fehler", f"Initialisierung fehlgeschlagen: {e}")
+            self.logger.error(f"Fehler bei Controller-Initialisierung: {str(e)}")
+            messagebox.showerror("Fehler", f"Konnte Servo-Controller nicht initialisieren: {str(e)}")
             raise
+
+    def on_closing(self):
+        """Handler für das Schließen des Fensters"""
+        try:
+            self._closing = True  # Flag setzen um Update-Loop zu stoppen
+            
+            # Servo-Controller herunterfahren
+            if hasattr(self, 'servo_controller'):
+                self.servo_controller.cleanup()
+            
+            # Fenster zerstören
+            self.destroy()
+            
+        except Exception as e:
+            self.logger.error(f"Fehler beim Schließen: {e}")
+            self.destroy()  # Trotzdem versuchen zu schließen
+
+    def update_servo_list(self):
+        """Aktualisiert die Servo-Liste"""
+        try:
+            # Hole aktuelle Auswahl
+            current = self.servo_var.get()
+            
+            # Liste leeren
+            self.servo_list['menu'].delete(0, 'end')
+            
+            # Neue Einträge hinzufügen
+            for i in range(16):
+                # Prüfe ob Servo verfügbar
+                if i >= 8 and not self.servo_controller.dual_board:
+                    continue
+                    
+                # Bestimme Textfarbe basierend auf Servo-Status
+                state = self.servo_controller.servo_states[i]
+                
+                # Bestimme Farbe basierend auf Servo-Status
+                if state['error']:
+                    fg = 'red'  # Rot für Fehler
+                elif not state['initialized']:
+                    fg = 'orange'  # Orange für nicht initialisiert
+                else:
+                    fg = 'black'  # Schwarz für normal
+                    
+                # Füge Eintrag hinzu
+                self.servo_list['menu'].add_command(
+                    label=f'Servo {i}',
+                    command=lambda x=f'Servo {i}': self.servo_var.set(x),
+                    foreground=fg
+                )
+            
+            # Setze Auswahl zurück wenn möglich
+            if current in [f'Servo {i}' for i in range(16)]:
+                self.servo_var.set(current)
+            else:
+                self.servo_var.set('Servo 0')
+                
+        except Exception as e:
+            self.logger.error(f"Fehler beim Aktualisieren der Servo-Liste: {e}")
+            messagebox.showerror("Fehler", str(e))
+
+    def toggle_servo_active(self):
+        """Aktiviert oder deaktiviert den ausgewählten Servo"""
+        try:
+            # Hole ausgewählten Servo
+            servo_id = int(self.servo_var.get().split()[1])
+            
+            # Hole aktuelle Konfiguration
+            config = self.servo_controller.config
+            
+            # Prüfe ob Servo aktiv ist
+            if servo_id in config['active_servos']:
+                # Deaktiviere Servo
+                config['active_servos'].remove(servo_id)
+                self.logger.info(f"Servo {servo_id} deaktiviert")
+            else:
+                # Aktiviere Servo
+                config['active_servos'].append(servo_id)
+                self.logger.info(f"Servo {servo_id} aktiviert")
+            
+            # Speichere Konfiguration
+            with open(self.servo_controller.config_file, 'w') as f:
+                json.dump(config, f, indent=4)
+            
+            # Aktualisiere GUI
+            self.update_servo_list()
+            
+        except Exception as e:
+            self.logger.error(f"Fehler beim Aktivieren/Deaktivieren des Servos: {e}")
+            messagebox.showerror("Fehler", str(e))
+
+    def test_servo(self, direction):
+        """Testet einen Servo mit den aktuellen Einstellungen"""
+        try:
+            # Hole Servo-ID
+            servo_str = self.servo_var.get()
+            servo_id = int(servo_str.split()[1]) - 1  # "Servo 1" -> 0
+            
+            # Hole Winkel
+            if direction == 'left':
+                angle = float(self.left_angle_var.get())
+            else:
+                angle = float(self.right_angle_var.get())
+                
+            # Setze Winkel direkt
+            if servo_id < 8:
+                self.servo_controller.kit1.servo[servo_id].angle = angle
+            elif self.servo_controller.dual_board:
+                self.servo_controller.kit2.servo[servo_id-8].angle = angle
+            else:
+                raise Exception("Zweites Board nicht verfügbar")
+                
+            # Aktualisiere Status
+            self.servo_controller.servo_states[servo_id].update({
+                'position': direction,
+                'current_angle': angle,
+                'last_move': time.time(),
+                'error': False,
+                'initialized': True
+            })
+            
+            self.logger.info(f"Test: Servo {servo_id} auf {angle}° ({direction}) gesetzt")
+            
+        except Exception as e:
+            self.logger.error(f"Fehler beim Testen: {e}")
+            messagebox.showerror("Fehler", f"Fehler beim Testen: {str(e)}")
+            
+    def move_servo(self, servo_id, direction):
+        """Bewegt einen Servo in die angegebene Richtung"""
+        try:
+            # Prüfe Parameter
+            if not isinstance(servo_id, int):
+                raise ValueError(f"Ungültige Servo-ID: {servo_id}")
+                
+            if direction not in ['left', 'right']:
+                raise ValueError(f"Ungültige Richtung: {direction}")
+                
+            # Bewege Servo
+            self.servo_controller.move_servo(servo_id, direction)
+            
+            # Aktualisiere GUI-Status
+            if str(servo_id) in self.position_labels:
+                self.position_labels[str(servo_id)].config(text=direction.capitalize())
+                
+            # Aktualisiere LED-Status
+            if str(servo_id) in self.servo_leds:
+                frame_data = self.servo_leds[str(servo_id)]
+                frame_data['canvas'].itemconfig(frame_data['led'], fill='green')
+                
+        except Exception as e:
+            self.logger.error(f"Fehler beim Bewegen von Servo {servo_id}: {e}")
+            
+            # Aktualisiere LED-Status auf Fehler
+            if str(servo_id) in self.servo_leds:
+                frame_data = self.servo_leds[str(servo_id)]
+                frame_data['canvas'].itemconfig(frame_data['led'], fill='red')
+                
+            # Zeige Fehlermeldung nur bei echten Fehlern
+            if not isinstance(e, ValueError):
+                messagebox.showerror("Fehler", f"Fehler beim Bewegen von Servo {servo_id}:\n{str(e)}")
+                
+    def create_automation_tab(self, parent):
+        """Erstellt den Automation-Tab"""
+        frame = ttk.Frame(parent, padding="10")
+        frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # Muster-Auswahl
+        pattern_frame = ttk.LabelFrame(frame, text="Automatik-Muster", padding="5")
+        pattern_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Muster definieren
+        self.patterns = {
+            "Links → Rechts": "left_to_right",
+            "Rechts → Links": "right_to_left",
+            "Abwechselnd": "alternate",
+            "Zufällig": "random"
+        }
+        
+        self.pattern_var = tk.StringVar(value="Links → Rechts")
+        pattern_menu = ttk.Combobox(pattern_frame, 
+                                  textvariable=self.pattern_var,
+                                  values=list(self.patterns.keys()),
+                                  state="readonly")
+        pattern_menu.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Geschwindigkeits-Slider
+        speed_frame = ttk.LabelFrame(frame, text="Geschwindigkeit", padding="5")
+        speed_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        self.speed_var = tk.DoubleVar(value=1.0)
+        speed_scale = ttk.Scale(speed_frame, 
+                              from_=0.1, 
+                              to=2.0,
+                              variable=self.speed_var,
+                              orient=tk.HORIZONTAL)
+        speed_scale.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Start/Stop Buttons
+        button_frame = ttk.Frame(frame)
+        button_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        self.start_button = ttk.Button(button_frame, 
+                                     text="Start",
+                                     command=self.start_automation)
+        self.start_button.pack(side=tk.LEFT, padx=5)
+        
+        self.stop_button = ttk.Button(button_frame,
+                                    text="Stop",
+                                    command=self.stop_automation,
+                                    state=tk.DISABLED)
+        self.stop_button.pack(side=tk.LEFT, padx=5)
+        
+    def start_automation(self):
+        """Startet die Automation"""
+        try:
+            # Pattern-Name aus der Auswahl ermitteln
+            pattern_display = self.pattern_var.get()
+            pattern = self.patterns.get(pattern_display)
+            
+            if not pattern:
+                raise ValueError(f"Ungültiges Muster: {pattern_display}")
+            
+            # Automation starten
+            self.automation_controller.start_automation(pattern)
+            
+            # Buttons aktualisieren
+            self.start_button.config(state=tk.DISABLED)
+            self.stop_button.config(state=tk.NORMAL)
+            
+        except Exception as e:
+            self.logger.error(f"Fehler beim Starten der Automation: {e}")
+            messagebox.showerror("Fehler", f"Fehler beim Starten der Automation: {str(e)}")
+            
+    def stop_automation(self):
+        """Stoppt die Automation"""
+        try:
+            self.automation_controller.stop_automation()
+            
+            # Buttons aktualisieren
+            self.start_button.config(state=tk.NORMAL)
+            self.stop_button.config(state=tk.DISABLED)
+            
+        except Exception as e:
+            self.logger.error(f"Fehler beim Stoppen der Automation: {e}")
+            messagebox.showerror("Fehler", f"Fehler beim Stoppen der Automation: {str(e)}")
+
+    def move_selected_servo(self, direction):
+        """Bewegt den ausgewählten Servo"""
+        try:
+            # Hole Servo-ID
+            servo_str = self.servo_var.get()
+            if not servo_str:
+                messagebox.showwarning("Warnung", "Bitte wählen Sie einen Servo aus")
+                return
+                
+            servo_id = int(servo_str.split()[1]) - 1  # "Servo 1" -> 0
+            
+            # Bewege Servo
+            success = self.servo_controller.move_servo(servo_id, direction)
+            if not success:
+                self.logger.error(f"Fehler beim Bewegen von Servo {servo_id}")
+                
+            # Sofort aktualisieren
+            self.update_servo_status()
+            
+        except Exception as e:
+            self.logger.error(f"Fehler beim Bewegen des Servos: {e}")
+            messagebox.showerror("Fehler", str(e))
 
 def main():
     try:

@@ -59,6 +59,116 @@ Sensor 2:
 | 20         | 38  | Hall-Sensor 15   |
 | 21         | 40  | Hall-Sensor 16   |
 
+## PCA9685 PWM-Controller Anschluss
+
+Der PCA9685 PWM-Controller ermöglicht die präzise Steuerung von bis zu 16 Servos über I2C. Hier ist die detaillierte Anschlussanleitung:
+
+### 1. Stromversorgung
+
+#### Raspberry Pi Verbindungen
+- **VCC** → 3.3V oder 5V vom Raspberry Pi
+  - Option 1: Pin 1 (3.3V)
+  - Option 2: Pin 2 (5V)
+- **GND** → Pin 6 (GND) vom Raspberry Pi
+
+#### Externe Stromversorgung für Servos
+- **V+** → 5V von externer Stromversorgung
+- **V-** → GND von externer Stromversorgung
+
+⚠️ **WICHTIG**: 
+- NIEMALS die Servos direkt über den Raspberry Pi mit Strom versorgen!
+- Eine separate 5V-Stromversorgung für die Servos ist ZWINGEND erforderlich
+- Die Stromversorgung muss ausreichend dimensioniert sein (mindestens 2A, abhängig von der Anzahl der Servos)
+
+### 2. I2C-Verbindungen
+
+- **SCL** → Pin 5 (GPIO 3, SCL) vom Raspberry Pi
+- **SDA** → Pin 3 (GPIO 2, SDA) vom Raspberry Pi
+
+### 3. Servo-Anschlüsse
+
+Die Servos werden an die PWM-Ausgänge 0-15 des PCA9685 angeschlossen. Jeder Servo hat drei Anschlüsse:
+
+| Servo-Kabel      | Farbe          | Anschluss am PCA9685 |
+|------------------|----------------|---------------------|
+| Signal           | Orange/Gelb    | PWM-Pin (0-15)     |
+| Plus (+)         | Rot            | V+ Rail            |
+| Minus (-)        | Braun/Schwarz  | V- Rail            |
+
+#### Servo-Zuordnung
+| Servo-Nr. | PWM-Kanal | Funktion        |
+|-----------|-----------|-----------------|
+| 1         | PWM0      | Weiche 1        |
+| 2         | PWM1      | Weiche 2        |
+| 3         | PWM2      | Weiche 3        |
+| ...       | ...       | ...             |
+| 16        | PWM15     | Weiche 16       |
+
+### Schematische Darstellung
+
+```
+                                    ┌────────────────┐
+                                    │  Raspberry Pi │
+                                    │               │
+         ┌─────────────────────────→│ 3.3V/5V (1/2) │
+         │                          │               │
+         │                          │ SDA (3)       │
+         │                          │               │
+         │                          │ SCL (5)       │
+         │                          │               │
+         │                          │ GND (6)       │
+         │                          └───────────────┘
+         │                               │  │  │
+         │                               │  │  │
+┌────────────────┐                       │  │  │
+│   PCA9685      │                       │  │  │
+│                │←──────────────────────┘  │  │
+│ VCC            │                          │  │
+│                │←─────────────────────────┘  │
+│ SCL  SDA       │                             │
+│                │←────────────────────────────┘
+│ GND            │
+│                │         ┌─────────────────┐
+│ V+ V-          │←────────│ 5V Netzteil     │
+│                │         │ (Extern)        │
+│ PWM0           │         └─────────────────┘
+│ PWM1           │              
+│ ...            │              Servo
+│ PWM15          │         ┌────────────┐
+└────────────────┘         │ Signal ────│→ PWM
+     │  │                  │ +5V    ────│→ V+
+     │  │                  │ GND    ────│→ V-
+     │  │                  └────────────┘
+     │  └──→ Zu weiteren Servos
+     └─────→ Zu weiteren Servos
+```
+
+### Checkliste für die Installation
+
+1. [ ] Raspberry Pi ausschalten
+2. [ ] I2C-Verbindungen herstellen (SCL, SDA)
+3. [ ] GND-Verbindung zum Raspberry Pi herstellen
+4. [ ] VCC-Verbindung zum Raspberry Pi herstellen
+5. [ ] Externe Stromversorgung OHNE Servos testen
+6. [ ] Servos einzeln anschließen und testen
+7. [ ] I2C-Adresse prüfen mit `sudo i2cdetect -y 1`
+
+### Fehlerbehebung
+
+1. **Servos bewegen sich nicht:**
+   - Prüfen Sie die externe Stromversorgung
+   - Kontrollieren Sie die I2C-Verbindungen
+   - Testen Sie die I2C-Erkennung
+
+2. **Unregelmäßige Bewegungen:**
+   - Prüfen Sie die Stromversorgung auf ausreichende Leistung
+   - Kontrollieren Sie alle Masseverbindungen
+
+3. **I2C-Gerät wird nicht erkannt:**
+   - I2C aktiviert? (`sudo raspi-config`)
+   - Kabel richtig angeschlossen?
+   - Richtige I2C-Adresse? (Standard: 0x40)
+
 ## Wichtige Hinweise
 1. Verwenden Sie eine separate Stromversorgung für die Servomotoren
 2. Stellen Sie sicher, dass alle GND-Verbindungen miteinander verbunden sind

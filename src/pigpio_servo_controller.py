@@ -1,14 +1,18 @@
 import pigpio
-import time
 import json
 import os
+import time
 import logging
-import asyncio
-import shutil
-from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from concurrent.futures import ThreadPoolExecutor
 import glob
+import board
+import busio
+from adafruit_servokit import ServoKit
+
+# Raspberry Pi spezifische I2C Pins
+SCL = board.SCL  # GPIO 3 (Pin 5)
+SDA = board.SDA  # GPIO 2 (Pin 3)
 
 class ServoSafetyMonitor:
     def __init__(self, config=None):
@@ -89,49 +93,128 @@ class ServoSafetyMonitor:
             total_errors = sum(self.error_counts.values())
             if total_errors >= self.config['ERROR_THRESHOLD']:
                 # Sperre alle Servos
-                for sid in range(16):
+                for sid in range(8):
                     self.locked_servos.add(sid)
                     self.last_movement[sid] = time.time() + self.config['GLOBAL_LOCK_DURATION']
 
 class PiGPIOServoController:
-    def __init__(self, pi, servo_pins, led_pins=None, config_file=None):
+    def __init__(self, pi, servo_pins, config_file='config.json', use_servokit=False):
         """Initialisiert den Servo-Controller"""
         self.pi = pi
         self.servo_pins = servo_pins
-        self.led_pins = led_pins if led_pins else [None] * len(servo_pins)
-        self.config_file = config_file if config_file else 'config.json'
+        self.config_file = config_file
+        self.use_servokit = use_servokit
+        self.kit = None
         
-        # Logger initialisieren
-        self.logger = logging.getLogger('ServoController')
+        # Logger einrichten
+        self.logger = logging.getLogger('servo_controller')
+        self.logger.setLevel(logging.DEBUG)
         
-        # Initialisiere Servos
-        for pin in self.servo_pins:
-            if pin is not None:
-                self.pi.set_mode(pin, pigpio.OUTPUT)
-                # Setze PWM-Frequenz auf 50Hz (Standard für Servos)
-                self.pi.set_PWM_frequency(pin, 50)
-                # Kein PWM-Signal am Start
-                self.pi.set_servo_pulsewidth(pin, 0)
+        # Safety Monitor initialisieren
+        self.safety_monitor = ServoSafetyMonitor()
         
-        # Initialisiere LEDs
-        for pin in self.led_pins:
-            if pin is not None:
-                self.pi.set_mode(pin, pigpio.OUTPUT)
-                self.pi.write(pin, 0)  # LED aus
+        # ServoKit initialisieren wenn gewünscht
+        if self.use_servokit:
+            try:
+                # ServoKit mit 8 Kanälen initialisieren
+                self.kit = ServoKit(channels=8)
+                self.logger.info("ServoKit erfolgreich initialisiert")
                 
-        # Lade Konfiguration
+            except Exception as e:
+                self.logger.error(f"Fehler bei ServoKit-Initialisierung: {e}")
+                raise
+        
+        # Konfiguration laden oder Standardkonfiguration erstellen
+        if not os.path.exists(config_file):
+            self.create_default_config()
         self.load_config()
         
-        # Initialisiere Servo-Zustände
+        # Servo-Status initialisieren
         self.servo_states = {}
-        for i in range(len(servo_pins)):
+        for i in range(8):  # Nur 8 Kanäle
             self.servo_states[i] = {
-                'position': None,  # 'left', 'right' oder None
-                'current_angle': None,  # Aktueller Winkel
+                'position': None,
+                'current_angle': None,
                 'last_move': 0,
-                'move_count': 0,
-                'error': False
+                'error': False,
+                'move_count': 0
             }
+            
+    def create_default_config(self):
+        """Erstellt eine Standard-Konfiguration"""
+        config = {}
+        for i in range(8):
+            config[str(i)] = {
+                'left_angle': 0,
+                'right_angle': 180,
+                'speed': 1.0
+            }
+        with open(self.config_file, 'w') as f:
+            json.dump(config, f, indent=4)
+            
+    def angle_to_pulse_pigpio(self, angle):
+        """Konvertiert einen Winkel (0-180) in einen Pulswert (500-2500) für PIGPIO"""
+        return int(500 + (2500 - 500) * angle / 180)
+        
+    def move_servo(self, servo_id, direction):
+        """Bewegt einen Servo in die angegebene Richtung"""
+        try:
+            if not self.use_servokit or self.kit is None:
+                self.logger.error("ServoKit nicht initialisiert")
+                return False
+                
+            if str(servo_id) not in self.config:
+                self.logger.error(f"Keine Konfiguration für Servo {servo_id}")
+                return False
+            
+            # Überprüfe ob Servo-ID im gültigen Bereich (0-7)
+            if servo_id >= 8:
+                self.logger.error(f"Servo-ID {servo_id} außerhalb des gültigen Bereichs (0-7)")
+                return False
+            
+            servo_config = self.config[str(servo_id)]
+            angle = servo_config['left_angle'] if direction == 'left' else servo_config['right_angle']
+            
+            self.logger.debug(f"Bewege Servo {servo_id} nach {direction} (Winkel: {angle})")
+            
+            try:
+                self.kit.servo[servo_id].angle = angle
+                time.sleep(0.1)  # Kurze Pause nach Bewegung
+                self.logger.info(f"Servo {servo_id} erfolgreich bewegt zu {direction} (Winkel: {angle})")
+                
+                # Status aktualisieren
+                self.servo_states[servo_id]['position'] = direction
+                self.servo_states[servo_id]['current_angle'] = angle
+                self.servo_states[servo_id]['last_move'] = time.time()
+                self.servo_states[servo_id]['error'] = False
+                self.servo_states[servo_id]['move_count'] += 1
+                
+                return True
+                
+            except Exception as e:
+                self.logger.error(f"ServoKit Fehler bei Servo {servo_id}: {e}")
+                self.servo_states[servo_id]['error'] = True
+                return False
+            
+        except Exception as e:
+            self.logger.error(f"Fehler beim Bewegen von Servo {servo_id}: {e}")
+            self.servo_states[servo_id]['error'] = True
+            return False
+            
+    def cleanup(self):
+        """Räumt auf und gibt Ressourcen frei"""
+        try:
+            if self.use_servokit and self.kit is not None:
+                # Alle Servos auf 0
+                for i in range(8):
+                    self.kit.servo[i].angle = 0
+            else:
+                # PIGPIO aufräumen
+                for pin in self.servo_pins:
+                    if pin is not None:
+                        self.pi.set_servo_pulsewidth(pin, 0)
+        except Exception as e:
+            self.logger.error(f"Fehler beim Cleanup: {e}")
 
     def load_config(self):
         """Lädt die Konfiguration oder erstellt eine neue"""
@@ -227,7 +310,7 @@ class PiGPIOServoController:
     def set_servo_angle(self, servo_id: int, angle: float):
         """
         Setzt den Winkel für einen Servo
-        :param servo_id: ID des Servos (0-15)
+        :param servo_id: ID des Servos (0-7)
         :param angle: Winkel in Grad (0-180)
         """
         try:
@@ -296,7 +379,7 @@ class PiGPIOServoController:
     def move_servo(self, servo_id, direction):
         """
         Bewegt einen Servo in die angegebene Richtung
-        :param servo_id: ID des Servos (0-15)
+        :param servo_id: ID des Servos (0-7)
         :param direction: Richtung ('left' oder 'right')
         """
         try:
@@ -335,8 +418,8 @@ class PiGPIOServoController:
                 self.servo_states[servo_id]['position'] = direction
                 self.servo_states[servo_id]['current_angle'] = angle
                 self.servo_states[servo_id]['last_move'] = time.time()
-                self.servo_states[servo_id]['move_count'] += 1
                 self.servo_states[servo_id]['error'] = False
+                self.servo_states[servo_id]['move_count'] += 1
                 return True
             else:
                 self.servo_states[servo_id]['error'] = True
@@ -378,3 +461,100 @@ class PiGPIOServoController:
         for pin in self.servo_pins:
             if pin is not None:
                 self.pi.set_servo_pulsewidth(pin, 0)  # Stoppe PWM
+
+class PCA9685ServoController:
+    def __init__(self, config_file='config.json'):
+        """Initialisiert den Servo-Controller"""
+        self.config_file = config_file
+        self.logger = logging.getLogger('servo_controller')
+        
+        # Initialisiere I2C
+        i2c = busio.I2C(board.SCL, board.SDA)
+        self.pca = PCA9685(i2c)
+        self.pca.frequency = 50  # Standard-Frequenz für Servos
+        
+        # Lade oder erstelle Konfiguration
+        self.load_config()
+        
+        # Servo-Status initialisieren
+        self.servo_states = {}
+        for i in range(16):
+            self.servo_states[i] = {
+                'position': None,
+                'current_angle': None,
+                'last_move': 0,
+                'error': False
+            }
+            
+    def load_config(self):
+        """Lädt die Servo-Konfiguration aus der Datei"""
+        try:
+            if os.path.exists(self.config_file):
+                with open(self.config_file, 'r') as f:
+                    self.config = json.load(f)
+            else:
+                # Standard-Konfiguration
+                self.config = {}
+                for i in range(16):
+                    self.config[str(i)] = {
+                        'left_angle': 0,    # 0 Grad
+                        'right_angle': 180,  # 180 Grad
+                        'speed': 100        # Geschwindigkeit (0-100)
+                    }
+                self.save_config()
+        except Exception as e:
+            self.logger.error(f"Fehler beim Laden der Konfiguration: {e}")
+            raise
+            
+    def save_config(self):
+        """Speichert die Servo-Konfiguration in der Datei"""
+        try:
+            with open(self.config_file, 'w') as f:
+                json.dump(self.config, f, indent=4)
+        except Exception as e:
+            self.logger.error(f"Fehler beim Speichern der Konfiguration: {e}")
+            raise
+            
+    def angle_to_pulse(self, angle):
+        """Konvertiert einen Winkel (0-180) in einen Pulswert (0-65535)"""
+        # Typische Servo-Werte: 2.5% (0°) bis 12.5% (180°) des Zyklus
+        pulse_min = 1638  # 2.5% von 65535
+        pulse_max = 8192  # 12.5% von 65535
+        return int(pulse_min + (pulse_max - pulse_min) * angle / 180)
+            
+    def move_servo(self, servo_id, direction):
+        """Bewegt einen Servo in die angegebene Richtung"""
+        try:
+            if str(servo_id) not in self.config:
+                raise ValueError(f"Ungültige Servo-ID: {servo_id}")
+                
+            servo_config = self.config[str(servo_id)]
+            angle = servo_config['left_angle'] if direction == 'left' else servo_config['right_angle']
+            
+            # Konvertiere Winkel in Pulswert
+            pulse = self.angle_to_pulse(angle)
+            
+            # Setze PWM über PCA9685
+            self.pca.channels[servo_id].duty_cycle = pulse
+            
+            # Aktualisiere Status
+            self.servo_states[servo_id]['position'] = direction
+            self.servo_states[servo_id]['current_angle'] = angle
+            self.servo_states[servo_id]['last_move'] = time.time()
+            self.servo_states[servo_id]['error'] = False
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Fehler beim Bewegen von Servo {servo_id}: {e}")
+            self.servo_states[servo_id]['error'] = True
+            return False
+            
+    def cleanup(self):
+        """Räumt auf und gibt Ressourcen frei"""
+        try:
+            # Deaktiviere alle PWM-Kanäle
+            for i in range(16):
+                self.pca.channels[i].duty_cycle = 0
+        except Exception as e:
+            self.logger.error(f"Fehler beim Cleanup: {e}")
