@@ -11,10 +11,11 @@ from automation_controller import AutomationController
 from gui import GUI
 from track_map import TrackMap
 
-# Logging konfigurieren
+# Konfiguriere Root-Logger
 logging.basicConfig(
     level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
 )
 
 from servokit_controller import ServoKitController
@@ -89,13 +90,15 @@ from servokit_controller import ServoKitController
 class WeichensteuerungGUI(tk.Tk):
     def __init__(self):
         super().__init__()
-
+        
         # Fenster-Einstellungen für 10 Zoll Display
         self.title("Weichensteuerung")
         self.geometry("800x480")  # Typische 10 Zoll Auflösung
         
         # Logging
         self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.DEBUG)
+        self.logger.debug("GUI Initialisierung gestartet")
         
         # Variablen initialisieren
         self.servo_var = tk.StringVar(value="Servo 1")
@@ -117,6 +120,7 @@ class WeichensteuerungGUI(tk.Tk):
         # Servo Controller initialisieren
         try:
             self.servo_controller = ServoKitController()
+            self.logger.debug("ServoController erfolgreich initialisiert")
         except Exception as e:
             self.logger.error(f"Fehler beim Initialisieren des Servo Controllers: {e}")
             messagebox.showerror("Fehler", str(e))
@@ -154,133 +158,165 @@ class WeichensteuerungGUI(tk.Tk):
         self.create_track_tab(self.track_tab)
         self.create_info_tab(self.info_tab)
         
+        # Initialen Status setzen
+        self.logger.debug("Setze initialen Status")
+        self.update_servo_status()
+        
         # Status-Update Timer
+        self.logger.debug("Starte Status-Update Timer")
         self.after(1000, self.update_servo_status)
         
         # Fenster-Close Handler
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
+        self.logger.debug("GUI Initialisierung abgeschlossen")
         
     def create_control_tab(self, parent):
         """Erstellt den Control-Tab"""
-        # Frame für Servo-Steuerung
-        servos_frame = ttk.LabelFrame(parent, text="Servo-Steuerung")
-        servos_frame.pack(fill='both', expand=True, padx=5, pady=5)
+        self.logger.debug("Erstelle Control-Tab")
         
-        # Dictionary für Position Labels
+        # Initialisiere Dictionaries für LED Canvas und Position Labels
+        self.led_canvas = {}
         self.position_labels = {}
         
-        # Erstelle Steuerelemente für jeden Servo
+        # Frame für Servo-Steuerung
+        control_frame = ttk.Frame(parent)
+        control_frame.pack(expand=True, fill="both", padx=10, pady=5)
+        
+        # Grid für Servo-Controls
         for i in range(16):
-            # Frame für diesen Servo
-            servo_frame = ttk.Frame(servos_frame)
-            servo_frame.grid(row=i//4, column=i%4, padx=5, pady=5, sticky='nsew')
+            row = i // 4  # 4 Servos pro Zeile
+            col = i % 4   # 4 Spalten
             
-            # Servo-Nummer und LED
-            header_frame = ttk.Frame(servo_frame)
-            header_frame.pack(side='top')
+            # Frame für jeden Servo
+            servo_frame = ttk.LabelFrame(control_frame, text=f"Servo {i}")
+            servo_frame.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
             
-            ttk.Label(header_frame, text=f"Servo {i+1}").pack(side='left', padx=(0,5))
-            
-            led_canvas = tk.Canvas(header_frame, width=10, height=10)
-            led_canvas.pack(side='left')
-            led_canvas.create_oval(1, 1, 9, 9, fill='gray', tags=f'led_{i}')
+            # LED Canvas
+            canvas = tk.Canvas(servo_frame, width=20, height=20)
+            canvas.grid(row=0, column=0, columnspan=2, padx=2, pady=2)
+            led = canvas.create_oval(2, 2, 18, 18, fill="gray", tags=f"led_{i}")
+            self.led_canvas[str(i)] = canvas
+            self.logger.debug(f"LED Canvas für Servo {i} erstellt")
             
             # Position Label
-            pos_label = ttk.Label(servo_frame, text="---")
-            pos_label.pack(side='top', pady=2)
-            self.position_labels[str(i)] = pos_label
+            position_label = ttk.Label(servo_frame, text="---")
+            position_label.grid(row=1, column=0, columnspan=2, padx=2, pady=2)
+            self.position_labels[str(i)] = position_label
+            self.logger.debug(f"Position Label für Servo {i} erstellt")
             
-            # Button Frame
-            btn_frame = ttk.Frame(servo_frame)
-            btn_frame.pack(side='top', pady=2)
+            # Button Frame für die Buttons
+            button_frame = ttk.Frame(servo_frame)
+            button_frame.grid(row=2, column=0, columnspan=2, padx=2, pady=2)
             
-            # Links-Button
-            ttk.Button(btn_frame, 
-                      text="←", 
-                      width=2,
-                      command=lambda s=i: self.move_servo(s, 'left')).pack(side='left', padx=1)
+            # Buttons nebeneinander
+            left_button = ttk.Button(
+                button_frame, 
+                text="Links", 
+                command=lambda x=i: self.move_servo(x, "left")
+            )
+            left_button.pack(side="left", padx=2)
             
-            # Rechts-Button
-            ttk.Button(btn_frame, 
-                      text="→", 
-                      width=2,
-                      command=lambda s=i: self.move_servo(s, 'right')).pack(side='left', padx=1)
+            right_button = ttk.Button(
+                button_frame, 
+                text="Rechts", 
+                command=lambda x=i: self.move_servo(x, "right")
+            )
+            right_button.pack(side="left", padx=2)
             
-        # Grid-Konfiguration
-        for i in range(4):
-            servos_frame.grid_rowconfigure(i, weight=1)
-            servos_frame.grid_columnconfigure(i, weight=1)
+            # Aktualisiere LED-Status direkt nach der Erstellung
+            self.update_led_status(i)
+        
+        # Konfiguriere Grid
+        for i in range(4):  # 4 Spalten
+            control_frame.columnconfigure(i, weight=1)
+        for i in range(4):  # 4 Zeilen
+            control_frame.rowconfigure(i, weight=1)
             
-    def move_servo(self, servo_id, direction):
-        """Bewegt einen Servo in die angegebene Richtung"""
+        self.logger.debug(f"Control-Tab erstellt mit {len(self.led_canvas)} LED Canvas und {len(self.position_labels)} Position Labels")
+        
+    def update_led_status(self, servo_id):
+        """Aktualisiert den LED-Status für einen einzelnen Servo"""
         try:
-            # Bewege Servo
-            self.servo_controller.move_servo(servo_id, direction)
+            state = self.servo_controller.servo_states.get(str(servo_id), {})
+            status = state.get('status', 'unknown')
+            position = state.get('position', None)
             
-            # Aktualisiere LED-Status auf "moving" (gelb)
-            led_tag = f'led_{servo_id}'
-            led_items = self.winfo_children()[0].winfo_children()[0].winfo_children()[2].find_withtag(led_tag)
-            if led_items:
-                self.winfo_children()[0].winfo_children()[0].winfo_children()[2].itemconfig(led_items[0], fill='yellow')
+            self.logger.debug(f"Update LED Status für Servo {servo_id}: Status={status}, Position={position}")
+            
+            # Aktualisiere LED
+            if str(servo_id) in self.led_canvas:
+                canvas = self.led_canvas[str(servo_id)]
+                led = canvas.find_withtag(f'led_{servo_id}')[0]
+                color = {
+                    'initialized': 'green',
+                    'moving': 'yellow',
+                    'error': 'red',
+                    'unknown': 'gray'
+                }.get(status, 'gray')
+                canvas.itemconfig(led, fill=color)
+                self.logger.debug(f"LED für Servo {servo_id} auf {color} gesetzt")
             
             # Aktualisiere Position Label
             if str(servo_id) in self.position_labels:
-                text = "Links" if direction == 'left' else "Rechts"
+                if status == 'error':
+                    text = "Error"
+                elif position == 'left':
+                    text = "Links"
+                elif position == 'right':
+                    text = "Rechts"
+                else:
+                    text = "---"
                 self.position_labels[str(servo_id)].config(text=text)
+                self.logger.debug(f"Position Label für Servo {servo_id} auf {text} gesetzt")
                 
         except Exception as e:
-            self.logger.error(f"Fehler beim Bewegen von Servo {servo_id}: {e}")
-            # Setze LED auf rot bei Fehler
-            led_tag = f'led_{servo_id}'
-            led_items = self.winfo_children()[0].winfo_children()[0].winfo_children()[2].find_withtag(led_tag)
-            if led_items:
-                self.winfo_children()[0].winfo_children()[0].winfo_children()[2].itemconfig(led_items[0], fill='red')
-            # Setze Position Label auf Error
-            if str(servo_id) in self.position_labels:
-                self.position_labels[str(servo_id)].config(text="Error")
-            messagebox.showerror("Fehler", str(e))
+            self.logger.error(f"Fehler beim Aktualisieren des LED-Status für Servo {servo_id}: {e}")
             
     def update_servo_status(self):
         """Aktualisiert die Status-LEDs und Position Labels aller Servos"""
         try:
-            for i in range(16):  # Für alle 16 Servos
-                # Hole Servo-Status
-                state = self.servo_controller.servo_states.get(str(i), {})
-                status = state.get('status', 'unknown')
-                position = state.get('position', None)
-                
-                # Aktualisiere LED
-                led_tag = f'led_{i}'
-                led_items = self.winfo_children()[0].winfo_children()[0].winfo_children()[2].find_withtag(led_tag)
-                if led_items:
-                    led = led_items[0]
-                    # Bestimme LED-Farbe basierend auf Status
-                    color = {
-                        'initialized': 'green',  # Servo ist initialisiert
-                        'moving': 'yellow',      # Servo bewegt sich gerade
-                        'error': 'red',          # Fehler aufgetreten
-                        'unknown': 'gray'        # Status unbekannt
-                    }.get(status, 'gray')
-                    self.winfo_children()[0].winfo_children()[0].winfo_children()[2].itemconfig(led, fill=color)
-                
-                # Aktualisiere Position Label
-                if str(i) in self.position_labels:
-                    if status == 'error':
-                        text = "Error"
-                    elif position == 'left':
-                        text = "Links"
-                    elif position == 'right':
-                        text = "Rechts"
-                    else:
-                        text = "---"
-                    self.position_labels[str(i)].config(text=text)
-                
+            self.logger.debug("Starte Status-Update für alle Servos")
+            for i in range(16):
+                self.update_led_status(i)
         except Exception as e:
             self.logger.error(f"Fehler beim Aktualisieren der Status-LEDs: {e}")
-            
+        
         # Plane nächste Aktualisierung in 1 Sekunde
         self.after(1000, self.update_servo_status)
         
+    def move_servo(self, servo_id, direction):
+        """Bewegt einen Servo in die angegebene Richtung"""
+        try:
+            self.logger.debug(f"Bewege Servo {servo_id} nach {direction}")
+            
+            # Setze Status auf 'moving'
+            if str(servo_id) in self.led_canvas:
+                canvas = self.led_canvas[str(servo_id)]
+                led = canvas.find_withtag(f'led_{servo_id}')[0]
+                canvas.itemconfig(led, fill='yellow')
+                self.logger.debug(f"LED für Servo {servo_id} auf gelb gesetzt (moving)")
+            
+            # Bewege Servo
+            self.servo_controller.move_servo(servo_id, direction)
+            
+            # Aktualisiere Status sofort
+            self.update_servo_status()
+            
+        except Exception as e:
+            self.logger.error(f"Fehler beim Bewegen von Servo {servo_id}: {e}")
+            messagebox.showerror("Fehler", f"Servo {servo_id} konnte nicht bewegt werden: {e}")
+            
+            # Setze Status auf 'error'
+            if str(servo_id) in self.led_canvas:
+                canvas = self.led_canvas[str(servo_id)]
+                led = canvas.find_withtag(f'led_{servo_id}')[0]
+                canvas.itemconfig(led, fill='red')
+                self.logger.debug(f"LED für Servo {servo_id} auf rot gesetzt (error)")
+                
+            if str(servo_id) in self.position_labels:
+                self.position_labels[str(servo_id)].config(text="Error")
+                self.logger.debug(f"Position Label für Servo {servo_id} auf 'Error' gesetzt")
+                
     def create_calibration_tab(self, parent):
         """Erstellt den Kalibrierungs-Tab"""
         frame = ttk.Frame(parent)
@@ -763,13 +799,21 @@ Weboberfläche:
         button_frame.pack(fill=tk.X, padx=5, pady=2)
         
         # Links-Button
-        left_btn = ttk.Button(button_frame, text="←", width=3,
-                            command=lambda: self.move_servo(servo_id, 'left'))
+        left_btn = ttk.Button(
+            button_frame, 
+            text="←", 
+            width=3,
+            command=lambda: self.move_servo(servo_id, 'left')
+        )
         left_btn.pack(side=tk.LEFT, padx=2)
         
         # Rechts-Button
-        right_btn = ttk.Button(button_frame, text="→", width=3,
-                            command=lambda: self.move_servo(servo_id, 'right'))
+        right_btn = ttk.Button(
+            button_frame, 
+            text="→", 
+            width=3,
+            command=lambda: self.move_servo(servo_id, 'right')
+        )
         right_btn.pack(side=tk.LEFT, padx=2)
         
         return servo_frame, canvas, led, pos_label

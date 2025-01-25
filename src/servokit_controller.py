@@ -108,6 +108,7 @@ class ServoKitController:
                             'status': 'initialized'
                         })
                         self.logger.info(f"Servo {i} gefunden und initialisiert")
+                        
                 except Exception as e:
                     self.logger.warning(f"Servo {i} nicht gefunden: {e}")
                     self.servo_states[str(i)].update({
@@ -117,6 +118,10 @@ class ServoKitController:
                         'current_angle': None,
                         'status': 'error'
                     })
+            
+            # Debug-Ausgabe der Servo-Status
+            for i in range(16):
+                self.logger.debug(f"Servo {i} Status nach Initialisierung: {self.servo_states.get(str(i))}")
             
             # Speichere aktualisierte Konfiguration
             self.save_config()
@@ -152,6 +157,8 @@ class ServoKitController:
                 'position': direction,
                 'current_angle': target_angle,
                 'last_move': time.time(),
+                'error': False,
+                'initialized': True,
                 'status': 'initialized'
             })
             
