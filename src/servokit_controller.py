@@ -16,7 +16,7 @@ class ServoKitController:
         'speed': 0.5         # Standard-Geschwindigkeit
     }
     
-    def __init__(self, config_file='config.json'):
+    def __init__(self):
         """Initialisiert den ServoKit Controller"""
         try:
             # Logger initialisieren
@@ -24,7 +24,7 @@ class ServoKitController:
             self.logger.setLevel(logging.DEBUG)
             
             # Config-Datei
-            self.config_file = config_file
+            self.config_file = "servo_config.json"
             
             # Erstelle I2C Bus
             self.i2c = busio.I2C(board.SCL, board.SDA)
@@ -60,16 +60,18 @@ class ServoKitController:
                     }
                     self.logger.warning(f"Servo {i} nicht in Konfiguration gefunden, füge Standard-Konfiguration hinzu")
                     
-                self.servo_states[i] = {
+                self.servo_states[str(i)] = {
                     'position': None,
                     'current_angle': None,
                     'last_move': 0,
                     'error': False,
-                    'initialized': False
+                    'initialized': False,
+                    'status': 'unknown'
                 }
             
             # Teste alle Servos
             self.logger.info("Teste alle Servos...")
+            
             for i in range(16):
                 if i >= 8 and not self.dual_board:
                     continue
@@ -83,11 +85,12 @@ class ServoKitController:
                         time.sleep(0.1)
                         
                         # Wenn kein Fehler aufgetreten ist, markiere als initialisiert
-                        self.servo_states[i].update({
+                        self.servo_states[str(i)].update({
                             'error': False,
                             'initialized': True,
                             'position': 'left',
-                            'current_angle': self.config[str(i)]['left_angle']
+                            'current_angle': self.config[str(i)]['left_angle'],
+                            'status': 'initialized'
                         })
                         self.logger.info(f"Servo {i} gefunden und initialisiert")
                     elif self.dual_board:
@@ -97,20 +100,22 @@ class ServoKitController:
                         time.sleep(0.1)
                         
                         # Wenn kein Fehler aufgetreten ist, markiere als initialisiert
-                        self.servo_states[i].update({
+                        self.servo_states[str(i)].update({
                             'error': False,
                             'initialized': True,
                             'position': 'left',
-                            'current_angle': self.config[str(i)]['left_angle']
+                            'current_angle': self.config[str(i)]['left_angle'],
+                            'status': 'initialized'
                         })
                         self.logger.info(f"Servo {i} gefunden und initialisiert")
                 except Exception as e:
                     self.logger.warning(f"Servo {i} nicht gefunden: {e}")
-                    self.servo_states[i].update({
+                    self.servo_states[str(i)].update({
                         'error': True,
                         'initialized': False,
                         'position': None,
-                        'current_angle': None
+                        'current_angle': None,
+                        'status': 'error'
                     })
             
             # Speichere aktualisierte Konfiguration
@@ -121,43 +126,43 @@ class ServoKitController:
             self.logger.error(f"Fehler bei der Initialisierung: {e}")
             raise
             
-    def test_servo(self, kit, channel):
-        """Testet ob ein Servo angeschlossen ist"""
+    def move_servo(self, servo_id, direction):
+        """Bewegt einen Servo in die angegebene Richtung"""
         try:
-            # Prüfe ob der Kanal überhaupt aktiv ist
-            if not hasattr(kit, '_pca') or not hasattr(kit._pca, '_channels'):
-                return False
+            # Prüfe ob Servo initialisiert
+            if not self.servo_states[str(servo_id)]['initialized']:
+                raise Exception("Servo nicht initialisiert")
                 
-            # Hole den PWM Kanal
-            pwm_channel = kit._pca.channels[channel]
-            if not pwm_channel:
-                return False
+            # Setze Status auf "moving"
+            self.servo_states[str(servo_id)]['status'] = 'moving'
+            
+            # Hole Zielwinkel aus Konfiguration
+            target_angle = self.config[str(servo_id)][f'{direction}_angle']
+            
+            # Bewege Servo
+            if servo_id < 8:
+                self.kit1.servo[servo_id].angle = target_angle
+            else:
+                if not self.dual_board:
+                    raise Exception("Zweites Board nicht verfügbar")
+                self.kit2.servo[servo_id-8].angle = target_angle
                 
-            # Prüfe ob der Kanal einen Strom zieht
-            duty_cycle = pwm_channel.duty_cycle
-            if duty_cycle == 0:
-                return False
-                
-            # Versuche den Servo zu bewegen
-            try:
-                kit.servo[channel].angle = 90
-                time.sleep(0.1)
-                current_angle = kit.servo[channel].angle
-                
-                # Prüfe ob der Winkel korrekt gesetzt wurde
-                if current_angle is None or abs(current_angle - 90) > 5:
-                    self.logger.debug(f"Servo {channel} reagiert nicht korrekt")
-                    return False
-                    
-                return True
-                
-            except Exception as e:
-                self.logger.debug(f"Servo {channel} nicht steuerbar: {e}")
-                return False
-                
+            # Aktualisiere Status
+            self.servo_states[str(servo_id)].update({
+                'position': direction,
+                'current_angle': target_angle,
+                'last_move': time.time(),
+                'status': 'initialized'
+            })
+            
+            # Speichere Konfiguration
+            self.save_config()
+            self.logger.info(f"Servo {servo_id} erfolgreich bewegt zu {direction} (Winkel: {target_angle})")
+            
         except Exception as e:
-            self.logger.debug(f"Servo {channel} Test fehlgeschlagen: {e}")
-            return False
+            self.servo_states[str(servo_id)]['status'] = 'error'
+            self.logger.error(f"Fehler beim Bewegen von Servo {servo_id}: {e}")
+            raise
             
     def create_default_config(self):
         """Erstellt eine Standard-Konfiguration"""
@@ -167,11 +172,19 @@ class ServoKitController:
             
             # Füge Standard-Konfiguration für jedes Board hinzu
             for i in range(16):  # Erstes Board
-                config[str(i)] = self.DEFAULT_CONFIG.copy()
+                config[str(i)] = {
+                    'left_angle': 0,
+                    'right_angle': 180,
+                    'speed': 0.5
+                }
                 
             if self.dual_board:
                 for i in range(16):  # Zweites Board
-                    config[str(i+16)] = self.DEFAULT_CONFIG.copy()
+                    config[str(i+16)] = {
+                        'left_angle': 0,
+                        'right_angle': 180,
+                        'speed': 0.5
+                    }
             
             # Speichere Konfiguration
             self.config = config
@@ -204,13 +217,21 @@ class ServoKitController:
             for i in range(16):  # Erstes Board
                 if str(i) not in config:
                     self.logger.warning(f"Servo {i} nicht in Konfiguration gefunden, füge Standard-Konfiguration hinzu")
-                    config[str(i)] = self.DEFAULT_CONFIG.copy()
+                    config[str(i)] = {
+                        'left_angle': 0,
+                        'right_angle': 180,
+                        'speed': 0.5
+                    }
                     
             if self.dual_board:
                 for i in range(16):  # Zweites Board
                     if str(i+16) not in config:
                         self.logger.warning(f"Servo {i+16} nicht in Konfiguration gefunden, füge Standard-Konfiguration hinzu")
-                        config[str(i+16)] = self.DEFAULT_CONFIG.copy()
+                        config[str(i+16)] = {
+                            'left_angle': 0,
+                            'right_angle': 180,
+                            'speed': 0.5
+                        }
             
             self.logger.info("Konfiguration erfolgreich geladen")
             return config
@@ -256,55 +277,6 @@ class ServoKitController:
             
         except Exception as e:
             self.logger.error(f"Fehler beim Speichern der Konfiguration: {e}")
-            raise
-            
-    def move_servo(self, servo_id, direction):
-        """Bewegt einen Servo in die angegebene Richtung"""
-        try:
-            # Prüfe Parameter
-            if not isinstance(servo_id, int):
-                raise ValueError(f"Ungültige Servo-ID: {servo_id}")
-                
-            if direction not in ['left', 'right']:
-                raise ValueError(f"Ungültige Richtung: {direction}")
-                
-            # Hole Konfiguration
-            config = self.config.get(str(servo_id))
-            if not config:
-                raise ValueError(f"Keine Konfiguration für Servo {servo_id} gefunden")
-                
-            # Hole Zielwinkel aus Konfiguration
-            target_angle = float(config[f'{direction}_angle'])
-            
-            self.logger.debug(f"Servo {servo_id} Status vor Bewegung: {self.servo_states[servo_id]}")
-            
-            # Bewege Servo
-            if servo_id < 8:
-                self.kit1.servo[servo_id].angle = target_angle
-            else:
-                if not self.dual_board:
-                    raise Exception(f"Servo {servo_id} nicht verfügbar (kein zweites Board)")
-                self.kit2.servo[servo_id-8].angle = target_angle
-                
-            # Aktualisiere Status
-            self.servo_states[servo_id].update({
-                'position': direction,
-                'current_angle': target_angle,
-                'last_move': time.time(),
-                'error': False,
-                'initialized': True
-            })
-            
-            self.logger.debug(f"Servo {servo_id} Status nach Bewegung: {self.servo_states[servo_id]}")
-            self.logger.info(f"Servo {servo_id} erfolgreich bewegt zu {direction} (Winkel: {target_angle})")
-            
-            # Speichere Konfiguration
-            self.save_config()
-            
-        except Exception as e:
-            self.logger.error(f"Fehler beim Bewegen von Servo {servo_id}: {e}")
-            if str(servo_id) in self.servo_states:
-                self.servo_states[servo_id]['error'] = True
             raise
             
     def set_servo_angle(self, servo_id, angle):
@@ -361,6 +333,61 @@ class ServoKitController:
             if str(servo_id) in self.servo_states:
                 self.servo_states[servo_id]['error'] = True
             raise
+            
+    def get_servo_status(self, servo_id):
+        """Gibt den Status eines Servos zurück"""
+        status = {
+            'initialized': False,
+            'error': False,
+            'position': None,
+            'current_angle': None
+        }
+        
+        try:
+            # Prüfe ob Servo in Konfiguration
+            if str(servo_id) in self.config:
+                status['initialized'] = True
+                if servo_id < 8:
+                    status['current_angle'] = self.kit1.servo[servo_id].angle
+                else:
+                    if not self.dual_board:
+                        raise Exception(f"Servo {servo_id} nicht verfügbar (kein zweites Board)")
+                    status['current_angle'] = self.kit2.servo[servo_id-8].angle
+                status['position'] = self.get_servo_position(servo_id)
+                
+        except Exception as e:
+            self.logger.error(f"Fehler beim Abrufen des Servo-Status {servo_id}: {e}")
+            status['error'] = True
+            
+        return status
+        
+    def get_servo_position(self, servo_id):
+        """Ermittelt die aktuelle Position eines Servos (links/rechts)"""
+        try:
+            if str(servo_id) not in self.config:
+                return None
+                
+            if servo_id < 8:
+                current_angle = self.kit1.servo[servo_id].angle
+            else:
+                if not self.dual_board:
+                    raise Exception(f"Servo {servo_id} nicht verfügbar (kein zweites Board)")
+                current_angle = self.kit2.servo[servo_id-8].angle
+                
+            left_angle = self.config[str(servo_id)]['left_angle']
+            right_angle = self.config[str(servo_id)]['right_angle']
+            
+            # Toleranz von 5 Grad
+            if abs(current_angle - left_angle) <= 5:
+                return 'left'
+            elif abs(current_angle - right_angle) <= 5:
+                return 'right'
+            else:
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"Fehler beim Ermitteln der Servo-Position {servo_id}: {e}")
+            return None
             
     def cleanup(self):
         """Räumt auf und gibt Ressourcen frei"""
