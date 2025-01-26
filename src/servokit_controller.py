@@ -88,65 +88,8 @@ class ServoKitController:
                     'status': 'unknown'
                 }
             
-            # Teste alle Servos
-            self.logger.info("Teste alle Servos...")
-            
-            for i in range(16):
-                if i >= 8 and not self.dual_board:
-                    continue
-                    
-                try:
-                    # Versuche den Servo zu bewegen
-                    if i < 8:
-                        # Setze den Servo sanft auf Mitte
-                        self.logger.debug(f"Bewege Servo {i} sanft zur Mitte...")
-                        self.move_servo_smooth(self.kit1._pca.channels[i], self.PWM_LEFT, self.PWM_CENTER)
-                        
-                        # Setze sanft auf rechts
-                        self.logger.debug(f"Bewege Servo {i} sanft nach rechts...")
-                        self.move_servo_smooth(self.kit1._pca.channels[i], self.PWM_CENTER, self.PWM_RIGHT)
-                        
-                        # Zurück nach links
-                        self.logger.debug(f"Bewege Servo {i} sanft nach links...")
-                        self.move_servo_smooth(self.kit1._pca.channels[i], self.PWM_RIGHT, self.PWM_LEFT)
-                        
-                        # Wenn kein Fehler aufgetreten ist, markiere als initialisiert
-                        self.servo_states[str(i)].update({
-                            'error': False,
-                            'initialized': True,
-                            'position': 'left',
-                            'current_angle': 30,
-                            'status': 'initialized'
-                        })
-                        self.logger.info(f"Servo {i} gefunden und initialisiert")
-                    elif self.dual_board:
-                        self.move_servo_smooth(self.kit2._pca.channels[i-8], self.PWM_LEFT, self.PWM_CENTER)
-                        self.move_servo_smooth(self.kit2._pca.channels[i-8], self.PWM_CENTER, self.PWM_RIGHT)
-                        self.move_servo_smooth(self.kit2._pca.channels[i-8], self.PWM_RIGHT, self.PWM_LEFT)
-                        
-                        # Wenn kein Fehler aufgetreten ist, markiere als initialisiert
-                        self.servo_states[str(i)].update({
-                            'error': False,
-                            'initialized': True,
-                            'position': 'left',
-                            'current_angle': 30,
-                            'status': 'initialized'
-                        })
-                        self.logger.info(f"Servo {i} gefunden und initialisiert")
-                        
-                except Exception as e:
-                    self.logger.warning(f"Servo {i} nicht gefunden: {e}")
-                    self.servo_states[str(i)].update({
-                        'error': True,
-                        'initialized': False,
-                        'position': None,
-                        'current_angle': None,
-                        'status': 'error'
-                    })
-            
-            # Debug-Ausgabe der Servo-Status
-            for i in range(16):
-                self.logger.debug(f"Servo {i} Status nach Initialisierung: {self.servo_states.get(str(i))}")
+            # Initialisiere Servos
+            self.initialize_servos()
             
             # Speichere aktualisierte Konfiguration
             self.save_config()
@@ -157,16 +100,14 @@ class ServoKitController:
             raise
             
     def _is_servo_available(self, servo_num: int) -> bool:
-        """Prüft ob ein Servo verfügbar ist"""
-        # Servo 0-7 sind immer verfügbar (erstes Board)
-        if 0 <= servo_num < 8:
-            return True
+        """Prüft ob ein Servo verfügbar und initialisiert ist"""
+        # Prüfe ob Servo im gültigen Bereich
+        if not (0 <= servo_num < 16):
+            return False
             
-        # Servo 8-15 nur wenn zweites Board vorhanden
-        if 8 <= servo_num < 16:
-            return self.dual_board
-            
-        return False
+        # Prüfe ob Servo initialisiert ist
+        servo_state = self.servo_states.get(str(servo_num), {})
+        return servo_state.get('initialized', False)
         
     def move_servo(self, servo_num: int, position: str) -> None:
         """Bewegt einen Servo in die angegebene Position"""
@@ -442,3 +383,76 @@ class ServoKitController:
     def __del__(self):
         """Destruktor"""
         self.cleanup()
+        
+    def test_servo(self, servo_num: int) -> bool:
+        """Testet ob ein Servo funktioniert"""
+        try:
+            # Prüfe Board-Verfügbarkeit
+            if servo_num >= 8 and not self.dual_board:
+                return False
+                
+            # Versuche den Servo zu bewegen
+            try:
+                # Mittelposition
+                self.logger.debug(f"Bewege Servo {servo_num} sanft zur Mitte...")
+                self.set_angle(servo_num, 90)
+                time.sleep(0.1)
+                
+                # Nach rechts
+                self.logger.debug(f"Bewege Servo {servo_num} sanft nach rechts...")
+                self.set_angle(servo_num, 150)
+                time.sleep(0.1)
+                
+                # Nach links
+                self.logger.debug(f"Bewege Servo {servo_num} sanft nach links...")
+                self.set_angle(servo_num, 30)
+                time.sleep(0.1)
+                
+                # Zurück zur Startposition
+                self.set_angle(servo_num, 30)
+                
+                return True
+                
+            except Exception as e:
+                self.logger.debug(f"Servo {servo_num} reagiert nicht: {e}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"Fehler beim Testen von Servo {servo_num}: {e}")
+            return False
+            
+    def initialize_servos(self):
+        """Initialisiert und testet alle Servos"""
+        self.logger.info("Teste alle Servos...")
+        
+        # Teste jeden Servo
+        for i in range(16):
+            # Initialisiere Status
+            self.servo_states[str(i)] = {
+                'position': None,
+                'current_angle': None,
+                'last_move': 0,
+                'error': False,
+                'initialized': False,
+                'status': 'unknown'
+            }
+            
+            # Teste den Servo
+            if self.test_servo(i):
+                self.servo_states[str(i)].update({
+                    'position': 'left',
+                    'current_angle': 30,
+                    'initialized': True,
+                    'status': 'initialized'
+                })
+                self.logger.info(f"Servo {i} gefunden und initialisiert")
+            else:
+                self.servo_states[str(i)].update({
+                    'initialized': False,
+                    'status': 'not_found'
+                })
+                self.logger.warning(f"Servo {i} nicht gefunden oder nicht funktionsfähig")
+                
+        # Speichere den Status
+        self.save_config()
+        self.logger.info("Servo-Initialisierung abgeschlossen")
