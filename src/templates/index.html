@@ -3,243 +3,332 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weichensteuerung</title>
+    <title>Car Motion System</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body {
-            background-color: #f8f9fa;
-            padding: 20px;
+        :root {
+            --bg-dark: #1a1a1a;
+            --bg-card: #2d2d2d;
+            --text-light: #e0e0e0;
+            --accent: #007bff;
+            --success: #28a745;
+            --error: #dc3545;
+            --warning: #ffc107;
         }
+        
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-light);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
         .servo-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 20px;
             margin-bottom: 30px;
         }
+        
         .servo-card {
-            background: white;
-            border-radius: 10px;
-            padding: 20px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            background: var(--bg-card);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
         }
+        
+        .servo-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+        }
+        
         .servo-card h3 {
-            margin-bottom: 15px;
-            color: #333;
+            margin-bottom: 20px;
+            color: var(--text-light);
+            font-size: 1.5rem;
+            border-bottom: 2px solid var(--accent);
+            padding-bottom: 10px;
         }
+        
         .btn-group {
             width: 100%;
+            gap: 10px;
+            margin-top: 15px;
         }
-        .status-badge {
-            margin-top: 10px;
-            padding: 5px 10px;
-            border-radius: 15px;
-            font-size: 0.9em;
-        }
-        .map-container {
-            background: white;
+        
+        .btn-control {
+            flex: 1;
+            padding: 12px;
             border-radius: 10px;
-            padding: 20px;
-            margin-top: 30px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            border: none;
+            font-weight: 600;
+            transition: all 0.2s;
+            background: var(--accent);
+            color: white;
         }
-        #trackMap {
-            width: 100%;
-            height: 500px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            position: relative;
-            background: #fff;
+        
+        .btn-control:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 15px rgba(0,123,255,0.5);
         }
-        .track {
-            position: absolute;
-            height: 4px;
-            background-color: #333;
-            transform-origin: 0 0;
+        
+        .btn-control:active {
+            transform: scale(0.95);
         }
-        .servo {
-            position: absolute;
-            width: 20px;
-            height: 20px;
-            background-color: red;
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-            transition: background-color 0.3s;
+        
+        .btn-left {
+            background: #2196F3;
         }
-        .servo.active {
-            background-color: green;
+        
+        .btn-right {
+            background: #4CAF50;
         }
-        .servo-label {
-            position: absolute;
-            font-size: 12px;
-            transform: translate(-50%, -100%);
-            margin-top: -5px;
+        
+        .status-badge {
+            display: inline-block;
+            margin-top: 15px;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+        
+        .status-initialized {
+            background: var(--success);
+            color: white;
+        }
+        
+        .status-error {
+            background: var(--error);
+            color: white;
+        }
+        
+        .status-unknown {
+            background: var(--warning);
+            color: black;
+        }
+        
+        .navbar {
+            background: var(--bg-card);
+            padding: 15px 25px;
+            margin-bottom: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+        
+        .navbar-brand {
+            color: var(--text-light);
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .navbar-info {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .ip-address {
+            color: var(--text-light);
+            background: rgba(255,255,255,0.1);
+            padding: 5px 15px;
+            border-radius: 10px;
+            font-family: monospace;
+        }
+
+        .system-info {
+            background: var(--bg-card);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .system-info h2 {
+            color: var(--text-light);
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+        }
+
+        .system-info p {
+            color: var(--text-light);
+            margin-bottom: 10px;
+            line-height: 1.6;
         }
     </style>
 </head>
 <body>
+    <nav class="navbar">
+        <div class="container-fluid">
+            <span class="navbar-brand">🚗 Car Motion System</span>
+            <div class="navbar-info">
+                <div class="ip-address" id="ip-address">IP: ...</div>
+                <div id="connection-status" class="status-badge">Verbinde...</div>
+            </div>
+        </div>
+    </nav>
+
     <div class="container">
-        <h1 class="mb-4">Weichensteuerung Web Interface</h1>
-        
-        <div class="servo-grid" id="servoGrid">
-            <!-- Servo-Karten werden hier dynamisch eingefügt -->
+        <div class="system-info">
+            <h2>Car Motion System</h2>
+            <p>
+                Willkommen beim Car Motion System! Diese Steuerung ermöglicht die präzise Kontrolle 
+                von bis zu 16 Servomotoren für Ihr Modellauto-System. Jeder Servo kann individuell 
+                nach links oder rechts bewegt werden und zeigt seinen aktuellen Status in Echtzeit an.
+            </p>
+            <p>
+                <strong>Status-Anzeigen:</strong><br>
+                🟢 Grün: Servo ist initialisiert und betriebsbereit<br>
+                🔴 Rot: Fehler beim Servo<br>
+                🟡 Gelb: Servo ist nicht verfügbar oder wird initialisiert
+            </p>
         </div>
 
-        <div class="map-container">
-            <h2 class="mb-3">Gleisplan</h2>
-            <div id="trackMap">
-                <!-- Gleise und Servos werden hier dynamisch eingefügt -->
-            </div>
+        <div class="servo-grid" id="servoGrid">
+            <!-- Servo-Karten werden hier dynamisch eingefügt -->
         </div>
     </div>
 
     <script>
-        // Servo-Positionen (aus der Skizze)
-        const servoPositions = [
-            { id: 0, x: 10, y: 20 },
-            { id: 1, x: 30, y: 40 },
-            { id: 2, x: 35, y: 45 },
-            { id: 3, x: 40, y: 40 },
-            { id: 4, x: 45, y: 35 },
-            { id: 5, x: 50, y: 40 },
-            { id: 6, x: 60, y: 45 },
-            { id: 7, x: 70, y: 40 },
-            { id: 8, x: 80, y: 35 },
-            { id: 9, x: 85, y: 40 },
-            { id: 10, x: 90, y: 45 }
-        ];
-
-        // Gleise zeichnen
-        function drawTracks() {
-            const map = document.getElementById('trackMap');
-            
-            // Hauptstrecke
-            createTrack(10, 40, 90, 40);
-            
-            // Schleifen und Abzweigungen
-            createTrack(30, 40, 40, 20, 45);  // Obere Schleife
-            createTrack(40, 20, 50, 40, -45);
-            
-            createTrack(60, 40, 70, 20, 45);  // Mittlere Schleife
-            createTrack(70, 20, 80, 40, -45);
-            
-            createTrack(35, 45, 45, 60, -45); // Untere Schleife
-            createTrack(45, 60, 55, 45, 45);
+        // IP-Adresse abrufen und anzeigen
+        async function getIpAddress() {
+            try {
+                const response = await fetch('/api/ip');
+                const data = await response.json();
+                document.getElementById('ip-address').textContent = `IP: ${data.ip}`;
+            } catch (error) {
+                console.error('Fehler beim Abrufen der IP:', error);
+            }
         }
-
-        function createTrack(x1, y1, x2, y2, angle = 0) {
-            const track = document.createElement('div');
-            track.className = 'track';
-            
-            // Position und Größe berechnen
-            const length = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
-            const rotation = angle || Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
-            
-            track.style.width = length + '%';
-            track.style.left = x1 + '%';
-            track.style.top = y1 + '%';
-            track.style.transform = `rotate(${rotation}deg)`;
-            
-            document.getElementById('trackMap').appendChild(track);
-        }
-
-        // Servos zeichnen
-        function drawServos() {
-            const map = document.getElementById('trackMap');
-            
-            servoPositions.forEach(pos => {
-                const servo = document.createElement('div');
-                servo.className = 'servo';
-                servo.id = `map-servo-${pos.id}`;
-                servo.style.left = pos.x + '%';
-                servo.style.top = pos.y + '%';
-                
-                const label = document.createElement('div');
-                label.className = 'servo-label';
-                label.textContent = `S${pos.id + 1}`;
-                
-                servo.appendChild(label);
-                map.appendChild(servo);
-            });
-        }
-
-        // Servo-Karten erstellen
+        
+        // Servo-Status
+        const servoStates = {};
+        
+        // Erstelle Servo-Karten
         function createServoCards() {
-            const servoGrid = document.getElementById('servoGrid');
+            const grid = document.getElementById('servoGrid');
             
-            for (let i = 0; i < servoPositions.length; i++) {
+            for (let i = 0; i < 16; i++) {
                 const card = document.createElement('div');
                 card.className = 'servo-card';
                 card.innerHTML = `
                     <h3>Servo ${i + 1}</h3>
-                    <div class="btn-group" role="group">
-                        <button type="button" class="btn btn-danger" onclick="setPosition(${i}, 'left')">Links</button>
-                        <button type="button" class="btn btn-success" onclick="setPosition(${i}, 'right')">Rechts</button>
+                    <div class="btn-group">
+                        <button class="btn-control btn-left" onclick="setPosition(${i}, 'left')">Links</button>
+                        <button class="btn-control btn-right" onclick="setPosition(${i}, 'right')">Rechts</button>
                     </div>
-                    <div class="status-badge bg-secondary text-white text-center" id="status-${i}">
-                        Position: Links
-                    </div>
+                    <div id="status-${i}" class="status-badge status-unknown">Initialisiere...</div>
                 `;
-                servoGrid.appendChild(card);
+                grid.appendChild(card);
             }
         }
-
-        // Servo-Position setzen
+        
+        // Setze Servo-Position
         async function setPosition(servoId, position) {
             try {
-                const response = await fetch(`/api/servo/${servoId}/${position}`, {
-                    method: 'POST'
+                const response = await fetch(`/api/servo/${servoId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ position })
                 });
-                const data = await response.json();
                 
-                if (response.ok) {
-                    updateStatus(servoId, position);
-                } else {
-                    alert(`Fehler: ${data.error}`);
+                if (!response.ok) {
+                    throw new Error('Servo konnte nicht gesteuert werden');
                 }
+                
+                // Aktualisiere Status
+                updateStatus(servoId);
+                
             } catch (error) {
                 console.error('Fehler:', error);
-                alert('Fehler bei der Kommunikation mit dem Server');
+                alert(`Fehler beim Setzen der Position: ${error.message}`);
             }
         }
-
-        // Status aktualisieren
-        function updateStatus(servoId, position) {
-            // Status-Badge aktualisieren
-            const statusBadge = document.getElementById(`status-${servoId}`);
-            statusBadge.textContent = `Position: ${position === 'left' ? 'Links' : 'Rechts'}`;
-            statusBadge.className = `status-badge ${position === 'left' ? 'bg-danger' : 'bg-success'} text-white text-center`;
-            
-            // Servo auf der Karte aktualisieren
-            const mapServo = document.getElementById(`map-servo-${servoId}`);
-            if (mapServo) {
-                mapServo.className = `servo ${position === 'right' ? 'active' : ''}`;
-            }
-        }
-
-        // Status regelmäßig aktualisieren
-        async function updateAllStatus() {
+        
+        // Aktualisiere Status eines Servos
+        async function updateStatus(servoId) {
             try {
-                const response = await fetch('/api/servos/status');
+                const response = await fetch(`/api/servo/${servoId}`);
                 const data = await response.json();
                 
-                if (response.ok) {
-                    Object.entries(data).forEach(([servoId, position]) => {
-                        updateStatus(parseInt(servoId), position);
-                    });
+                const statusBadge = document.getElementById(`status-${servoId}`);
+                if (!statusBadge) return;
+                
+                // Entferne alte Status-Klassen
+                statusBadge.classList.remove('status-initialized', 'status-error', 'status-unknown');
+                
+                // Setze neuen Status
+                if (data.error) {
+                    statusBadge.classList.add('status-error');
+                    statusBadge.textContent = 'Fehler';
+                } else if (data.initialized) {
+                    statusBadge.classList.add('status-initialized');
+                    statusBadge.textContent = data.position === 'left' ? 'Links' : 'Rechts';
+                } else {
+                    statusBadge.classList.add('status-unknown');
+                    statusBadge.textContent = 'Nicht verfügbar';
                 }
+                
             } catch (error) {
-                console.error('Fehler beim Aktualisieren des Status:', error);
+                console.error('Fehler beim Status-Update:', error);
+            }
+        }
+        
+        // Aktualisiere alle Servos
+        async function updateAllStatus() {
+            try {
+                const response = await fetch('/api/servos');
+                const servos = await response.json();
+                
+                for (const [id, data] of Object.entries(servos)) {
+                    const statusBadge = document.getElementById(`status-${id}`);
+                    if (!statusBadge) continue;
+                    
+                    // Entferne alte Status-Klassen
+                    statusBadge.classList.remove('status-initialized', 'status-error', 'status-unknown');
+                    
+                    // Setze neuen Status
+                    if (data.error) {
+                        statusBadge.classList.add('status-error');
+                        statusBadge.textContent = 'Fehler';
+                    } else if (data.initialized) {
+                        statusBadge.classList.add('status-initialized');
+                        statusBadge.textContent = data.position === 'left' ? 'Links' : 'Rechts';
+                    } else {
+                        statusBadge.classList.add('status-unknown');
+                        statusBadge.textContent = 'Nicht verfügbar';
+                    }
+                }
+                
+                // Aktualisiere Verbindungsstatus
+                const connectionStatus = document.getElementById('connection-status');
+                connectionStatus.classList.remove('status-error', 'status-initialized');
+                connectionStatus.classList.add('status-initialized');
+                connectionStatus.textContent = 'Verbunden';
+                
+            } catch (error) {
+                console.error('Fehler beim Status-Update:', error);
+                const connectionStatus = document.getElementById('connection-status');
+                connectionStatus.classList.remove('status-initialized');
+                connectionStatus.classList.add('status-error');
+                connectionStatus.textContent = 'Verbindungsfehler';
             }
         }
 
         // Initialisierung
         createServoCards();
-        drawTracks();
-        drawServos();
+        getIpAddress();
         
-        // Status alle 5 Sekunden aktualisieren
-        setInterval(updateAllStatus, 5000);
-        updateAllStatus();  // Initial update
+        // Regelmäßiges Status-Update
+        updateAllStatus();
+        setInterval(updateAllStatus, 1000);
+        setInterval(getIpAddress, 10000); // IP alle 10 Sekunden aktualisieren
     </script>
 </body>
 </html>

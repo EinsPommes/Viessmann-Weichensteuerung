@@ -4,14 +4,15 @@ import logging
 from logging.handlers import RotatingFileHandler
 import asyncio
 from functools import wraps
-from servo_controller import ServoController
+from servokit_controller import ServoKitController
 import os
+import socket
 
 app = Flask(__name__)
 CORS(app)
 
 # Logging einrichten
-logger = logging.getLogger('web_server')
+logger = logging.getLogger('car_motion_system')
 logger.setLevel(logging.INFO)
 
 def setup_logging():
@@ -19,7 +20,7 @@ def setup_logging():
     os.makedirs(log_dir, exist_ok=True)
     
     handler = RotatingFileHandler(
-        os.path.join(log_dir, 'web_server.log'),
+        os.path.join(log_dir, 'car_motion.log'),
         maxBytes=1024*1024,
         backupCount=5
     )
@@ -29,6 +30,18 @@ def setup_logging():
     )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
+
+def get_ip_address():
+    """Ermittelt die IP-Adresse des Servers"""
+    try:
+        # Erstelle einen Socket und verbinde mit einem externen Server
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"  # Fallback auf localhost
 
 def async_route(f):
     @wraps(f)
@@ -42,131 +55,93 @@ def async_route(f):
     return wrapped
 
 class WebServer:
-    def __init__(self, servo_controller):
-        self.servo_controller = servo_controller
+    def __init__(self, servo_controller=None):
+        # Erstelle neuen Controller wenn keiner übergeben wurde
+        self.servo_controller = servo_controller or ServoKitController()
         setup_logging()
         
         # Routes definieren
         self.setup_routes()
-    
+        
     def setup_routes(self):
         @app.route('/')
         def index():
-            """Rendert die Hauptseite"""
             return render_template('index.html')
-
-        @app.route('/api/servo/<int:servo_id>/position', methods=['POST'])
-        @async_route
-        async def set_position(servo_id):
+            
+        @app.route('/api/ip')
+        def ip():
+            """Liefert die IP-Adresse des Servers"""
+            return jsonify({
+                'ip': f"{get_ip_address()}:5000"
+            })
+            
+        @app.route('/api/servos', methods=['GET'])
+        def get_servos():
+            """Liefert Status aller Servos"""
+            try:
+                servos = {}
+                for i in range(16):
+                    state = self.servo_controller.servo_states.get(str(i), {})
+                    servos[str(i)] = {
+                        'position': state.get('position', 'unknown'),
+                        'initialized': state.get('initialized', False),
+                        'error': state.get('error', False),
+                        'status': state.get('status', 'unknown')
+                    }
+                return jsonify(servos)
+            except Exception as e:
+                logger.error(f"Fehler beim Abrufen der Servos: {e}")
+                return jsonify({'error': str(e)}), 500
+                
+        @app.route('/api/servo/<int:servo_id>', methods=['POST'])
+        def set_servo(servo_id):
+            """Setzt die Position eines Servos"""
             try:
                 data = request.get_json()
                 position = data.get('position')
                 
                 if position not in ['left', 'right']:
                     return jsonify({'error': 'Ungültige Position'}), 400
-                
-                await self.servo_controller.set_servo_position(servo_id, position)
+                    
+                self.servo_controller.move_servo(servo_id, position)
                 return jsonify({'status': 'success'})
                 
             except Exception as e:
-                logger.error(f"Fehler beim Setzen der Position: {e}")
+                logger.error(f"Fehler beim Setzen von Servo {servo_id}: {e}")
                 return jsonify({'error': str(e)}), 500
-        
-        @app.route('/api/servo/<int:servo_id>/position', methods=['GET'])
-        def get_position(servo_id):
-            try:
-                position = self.servo_controller.get_servo_position(servo_id)
-                return jsonify({'position': position})
-            except Exception as e:
-                logger.error(f"Fehler beim Abrufen der Position: {e}")
-                return jsonify({'error': str(e)}), 500
-        
-        @app.route('/api/servo/<int:servo_id>/config', methods=['GET'])
-        def get_config(servo_id):
-            try:
-                config = self.servo_controller.get_servo_config(servo_id)
-                return jsonify(config)
-            except Exception as e:
-                logger.error(f"Fehler beim Abrufen der Konfiguration: {e}")
-                return jsonify({'error': str(e)}), 500
-        
-        @app.route('/api/servo/<int:servo_id>/config', methods=['POST'])
-        def set_config(servo_id):
-            try:
-                config = request.get_json()
-                success = self.servo_controller.set_servo_config(servo_id, **config)
-                if success:
-                    return jsonify({'status': 'success'})
-                else:
-                    return jsonify({'error': 'Konfiguration konnte nicht gespeichert werden'}), 500
-            except Exception as e:
-                logger.error(f"Fehler beim Setzen der Konfiguration: {e}")
-                return jsonify({'error': str(e)}), 500
-        
-        @app.route('/api/status')
-        def get_status():
-            """Liefert den aktuellen Status aller Servos"""
-            try:
-                status = {}
-                for servo_id in range(16):
-                    state = servo_controller.servo_states.get(servo_id, {})
-                    status[servo_id] = {
-                        'position': state.get('position', None),
-                        'is_moving': state.get('is_moving', False),
-                        'last_error': state.get('last_error', None),
-                        'config': {
-                            'left_angle': servo_controller.servo_config[servo_id]['left_angle'],
-                            'right_angle': servo_controller.servo_config[servo_id]['right_angle'],
-                            'speed': servo_controller.servo_config[servo_id]['speed']
-                        }
-                    }
-                return jsonify({'status': status, 'success': True})
-            except Exception as e:
-                return jsonify({'error': str(e), 'success': False}), 500
-
-        @app.route('/api/calibrate/<int:servo_id>', methods=['POST'])
-        def calibrate_servo(servo_id):
-            """Kalibriert einen Servo mit den gegebenen Werten"""
-            try:
-                data = request.get_json()
-                if not data:
-                    return jsonify({'error': 'Keine Daten erhalten', 'success': False}), 400
-                    
-                # Konfiguration aktualisieren
-                servo_controller.set_servo_config(
-                    servo_id,
-                    left_angle=float(data.get('left_angle', 0)),
-                    right_angle=float(data.get('right_angle', 180)),
-                    speed=float(data.get('speed', 0.5))
-                )
                 
-                return jsonify({'message': 'Kalibrierung erfolgreich', 'success': True})
+        @app.route('/api/servo/<int:servo_id>', methods=['GET'])
+        def get_servo(servo_id):
+            """Liefert Status eines Servos"""
+            try:
+                state = self.servo_controller.servo_states.get(str(servo_id), {})
+                return jsonify({
+                    'position': state.get('position', 'unknown'),
+                    'initialized': state.get('initialized', False),
+                    'error': state.get('error', False),
+                    'status': state.get('status', 'unknown')
+                })
             except Exception as e:
-                return jsonify({'error': str(e), 'success': False}), 500
-
-        @app.route('/static/<path:path>')
-        def send_static(path):
-            return send_from_directory('static', path)
-    
-    def run(self, host='0.0.0.0', port=5000):
-        app.run(host=host, port=port)
+                logger.error(f"Fehler beim Abrufen von Servo {servo_id}: {e}")
+                return jsonify({'error': str(e)}), 500
 
 def init_controller():
+    """Initialisiert den ServoController"""
     try:
-        servo_controller = ServoController()
-        logger.info("Servo Controller erfolgreich initialisiert")
-        return servo_controller
+        return ServoKitController()
     except Exception as e:
-        logger.error(f"Fehler beim Initialisieren des Servo Controllers: {str(e)}")
+        logger.error(f"Fehler bei der Initialisierung des ServoControllers: {e}")
         raise
 
-def run_server():
+def run_server(host='0.0.0.0', port=5000, debug=False):
+    """Startet den Car Motion System Server"""
     try:
         servo_controller = init_controller()
-        web_server = WebServer(servo_controller)
-        web_server.run()
+        server = WebServer(servo_controller)
+        logger.info(f"Car Motion System startet auf http://{get_ip_address()}:{port}")
+        app.run(host=host, port=port, debug=debug)
     except Exception as e:
-        logger.error(f"Fehler beim Starten des Servers: {str(e)}")
+        logger.error(f"Fehler beim Starten des Servers: {e}")
         raise
 
 if __name__ == '__main__':

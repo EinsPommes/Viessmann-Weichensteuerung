@@ -1,55 +1,11 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, font
+import threading
 import logging
-import json
-import webbrowser
 import os
-import time
+import socket
 from servokit_controller import ServoKitController
-from pigpio_servo_controller import PiGPIOServoController
-from hall_sensor import HallSensor
-from automation_controller import AutomationController
-from gui import GUI
-from track_map import TrackMap
-
-# Konfiguriere Root-Logger
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-
-# Konfigurationswerte
-CONFIG = {
-    # GPIO-Pins für die Hall-Sensoren (BCM-Nummerierung)
-    'HALL_SENSOR_PINS': [17, 18, 27, 22, 23, 24, 25, 4,
-                        5, 6, 12, 13, 16, 19, 20, 21],
-    
-    # Servo-Kalibrierungswerte
-    'SERVO_CONFIG': {
-        'LEFT_ANGLE': 0,    # Minimaler Winkel
-        'RIGHT_ANGLE': 180, # Maximaler Winkel
-        'MIN_PULSE': 500,   # Minimale Pulsweite (µs)
-        'MAX_PULSE': 2500   # Maximale Pulsweite (µs)
-    },
-    
-    # I2C-Konfiguration
-    'I2C_ADDRESS': 0x40,    # Standard-Adresse des PCA9685
-}
-
-def load_config():
-    """Lädt die Konfiguration aus config.json wenn vorhanden"""
-    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
-    if os.path.exists(config_path):
-        with open(config_path, 'r') as f:
-            loaded_config = json.load(f)
-            CONFIG.update(loaded_config)
-
-def save_config():
-    """Speichert die aktuelle Konfiguration"""
-    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
-    with open(config_path, 'w') as f:
-        json.dump(CONFIG, f, indent=4)
+from web_server import run_server
 
 class WeichensteuerungGUI(tk.Tk):
     def __init__(self):
@@ -63,8 +19,21 @@ class WeichensteuerungGUI(tk.Tk):
             # Hauptfenster erstellen
             super().__init__()
             
+            # Vollbild für 10-Zoll-Display
+            self.attributes('-fullscreen', True)
+            
+            # Escape zum Beenden
+            self.bind('<Escape>', lambda e: self.destroy())
+            
+            # Style konfigurieren
+            self.style = ttk.Style()
+            self.style.configure('Title.TLabel', font=('Helvetica', 24, 'bold'))
+            self.style.configure('Header.TLabel', font=('Helvetica', 16, 'bold'))
+            self.style.configure('Normal.TLabel', font=('Helvetica', 14))
+            self.style.configure('Big.TButton', padding=5)
+            
             # Fenstertitel
-            self.title("Weichensteuerung")
+            self.title("Car Motion System")
             
             # Fenster mittig positionieren
             window_width = 800
@@ -141,42 +110,48 @@ class WeichensteuerungGUI(tk.Tk):
                 i = row * 4 + col  # Servo-ID
                 
                 # Frame für jeden Servo
-                servo_frame = ttk.Frame(control_frame, padding="3")
-                servo_frame.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
+                servo_frame = ttk.LabelFrame(control_frame, text=f"Servo {i+1}", padding="5")
+                servo_frame.grid(row=row, column=col, padx=5, pady=5, sticky=(tk.W, tk.E))
                 
-                # LED-Anzeige (Canvas)
-                canvas = tk.Canvas(servo_frame, width=20, height=20)
-                canvas.pack(pady=2)
+                # Status-Frame
+                status_frame = ttk.Frame(servo_frame)
+                status_frame.pack(fill=tk.X, pady=2)
                 
-                # Erstelle LED
-                led = canvas.create_oval(2, 2, 18, 18, fill='gray')
+                # LED-Canvas
+                canvas = tk.Canvas(status_frame, width=20, height=20, bg=self.cget('bg'), highlightthickness=0)
+                canvas.pack(side=tk.LEFT)
+                
+                # LED (Kreis) zeichnen
+                led = canvas.create_oval(5, 5, 15, 15, fill='gray')
                 self.led_canvas[i] = (canvas, led)
                 self.logger.debug(f"LED Canvas für Servo {i+1} erstellt")
                 
                 # Label für Servo-Nummer
-                ttk.Label(servo_frame, text=f"Servo {i+1}").pack()
+                ttk.Label(servo_frame, text=f"Servo {i+1}", style='Normal.TLabel').pack()
                 
                 # Label für Position
-                pos_label = ttk.Label(servo_frame, text="---")
+                pos_label = ttk.Label(servo_frame, text="---", style='Normal.TLabel')
                 pos_label.pack()
                 self.position_labels[i] = pos_label
                 self.logger.debug(f"Position Label für Servo {i+1} erstellt")
                 
-                # Frame für Buttons
+                # Button-Frame
                 btn_frame = ttk.Frame(servo_frame)
                 btn_frame.pack(pady=2)
                 
                 # Links-Button
                 ttk.Button(btn_frame, 
                           text="←", 
-                          width=2,
-                          command=lambda s=i: self.move_left(s)).pack(side='left', padx=1)
+                          width=3,
+                          style='Big.TButton',
+                          command=lambda s=i: self.move_left(s)).pack(side=tk.LEFT, padx=1)
                 
                 # Rechts-Button
                 ttk.Button(btn_frame, 
                           text="→", 
-                          width=2,
-                          command=lambda s=i: self.move_right(s)).pack(side='left', padx=1)
+                          width=3,
+                          style='Big.TButton',
+                          command=lambda s=i: self.move_right(s)).pack(side=tk.LEFT, padx=1)
                 
         # Grid-Konfiguration
         for i in range(4):
@@ -331,7 +306,7 @@ class WeichensteuerungGUI(tk.Tk):
         select_frame = ttk.Frame(calibration_frame)
         select_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        ttk.Label(select_frame, text="Servo auswählen:").pack(side=tk.LEFT, padx=5)
+        ttk.Label(select_frame, text="Servo auswählen:", style='Normal.TLabel').pack(side=tk.LEFT, padx=5)
         servo_select = ttk.Combobox(select_frame, 
                                   textvariable=self.cal_servo_var,
                                   values=[f"Servo {i+1}" for i in range(16)],
@@ -342,6 +317,7 @@ class WeichensteuerungGUI(tk.Tk):
         # Start-Button
         ttk.Button(calibration_frame, 
                   text="Kalibrierung starten",
+                  style='Big.TButton',
                   command=self.show_calibration_dialog).pack(pady=10)
         
         self.logger.debug("Kalibrierungs-Tab erstellt")
@@ -382,7 +358,8 @@ class WeichensteuerungGUI(tk.Tk):
             ttk.Label(main_frame, 
                      text="Stellen Sie die Positionen mit den Pfeiltasten ein",
                      wraplength=350,
-                     justify=tk.CENTER).pack(pady=(0,20))
+                     justify=tk.CENTER,
+                     style='Normal.TLabel').pack(pady=(0,20))
             
             # Linke Position
             left_frame = ttk.LabelFrame(main_frame, text="Linke Position", padding="10")
@@ -391,19 +368,19 @@ class WeichensteuerungGUI(tk.Tk):
             # Winkel-Anzeige und Steuerung in einer Reihe
             left_ctrl = ttk.Frame(left_frame)
             left_ctrl.pack(fill=tk.X)
-            ttk.Label(left_ctrl, text="Winkel:", width=8).pack(side=tk.LEFT)
+            ttk.Label(left_ctrl, text="Winkel:", width=8, style='Normal.TLabel').pack(side=tk.LEFT)
             
             # Label für linken Winkel
-            self.left_angle_label = ttk.Label(left_ctrl, text=f"{self.left_angle_var.get()}°", width=5)
+            self.left_angle_label = ttk.Label(left_ctrl, text=f"{self.left_angle_var.get()}°", width=5, style='Normal.TLabel')
             self.left_angle_label.pack(side=tk.LEFT)
             
             # Buttons rechtsbündig
             left_btn_frame = ttk.Frame(left_ctrl)
             left_btn_frame.pack(side=tk.RIGHT)
-            ttk.Button(left_btn_frame, text="◄◄", width=3, command=lambda: self.adjust_angle('left', -10)).pack(side=tk.LEFT, padx=1)
-            ttk.Button(left_btn_frame, text="◄", width=3, command=lambda: self.adjust_angle('left', -1)).pack(side=tk.LEFT, padx=1)
-            ttk.Button(left_btn_frame, text="►", width=3, command=lambda: self.adjust_angle('left', 1)).pack(side=tk.LEFT, padx=1)
-            ttk.Button(left_btn_frame, text="►►", width=3, command=lambda: self.adjust_angle('left', 10)).pack(side=tk.LEFT, padx=1)
+            ttk.Button(left_btn_frame, text="◄◄", width=3, style='Big.TButton', command=lambda: self.adjust_angle('left', -10)).pack(side=tk.LEFT, padx=1)
+            ttk.Button(left_btn_frame, text="◄", width=3, style='Big.TButton', command=lambda: self.adjust_angle('left', -1)).pack(side=tk.LEFT, padx=1)
+            ttk.Button(left_btn_frame, text="►", width=3, style='Big.TButton', command=lambda: self.adjust_angle('left', 1)).pack(side=tk.LEFT, padx=1)
+            ttk.Button(left_btn_frame, text="►►", width=3, style='Big.TButton', command=lambda: self.adjust_angle('left', 10)).pack(side=tk.LEFT, padx=1)
             
             # Rechte Position
             right_frame = ttk.LabelFrame(main_frame, text="Rechte Position", padding="10")
@@ -412,26 +389,26 @@ class WeichensteuerungGUI(tk.Tk):
             # Winkel-Anzeige und Steuerung in einer Reihe
             right_ctrl = ttk.Frame(right_frame)
             right_ctrl.pack(fill=tk.X)
-            ttk.Label(right_ctrl, text="Winkel:", width=8).pack(side=tk.LEFT)
+            ttk.Label(right_ctrl, text="Winkel:", width=8, style='Normal.TLabel').pack(side=tk.LEFT)
             
             # Label für rechten Winkel
-            self.right_angle_label = ttk.Label(right_ctrl, text=f"{self.right_angle_var.get()}°", width=5)
+            self.right_angle_label = ttk.Label(right_ctrl, text=f"{self.right_angle_var.get()}°", width=5, style='Normal.TLabel')
             self.right_angle_label.pack(side=tk.LEFT)
             
             # Buttons rechtsbündig
             right_btn_frame = ttk.Frame(right_ctrl)
             right_btn_frame.pack(side=tk.RIGHT)
-            ttk.Button(right_btn_frame, text="◄◄", width=3, command=lambda: self.adjust_angle('right', -10)).pack(side=tk.LEFT, padx=1)
-            ttk.Button(right_btn_frame, text="◄", width=3, command=lambda: self.adjust_angle('right', -1)).pack(side=tk.LEFT, padx=1)
-            ttk.Button(right_btn_frame, text="►", width=3, command=lambda: self.adjust_angle('right', 1)).pack(side=tk.LEFT, padx=1)
-            ttk.Button(right_btn_frame, text="►►", width=3, command=lambda: self.adjust_angle('right', 10)).pack(side=tk.LEFT, padx=1)
+            ttk.Button(right_btn_frame, text="◄◄", width=3, style='Big.TButton', command=lambda: self.adjust_angle('right', -10)).pack(side=tk.LEFT, padx=1)
+            ttk.Button(right_btn_frame, text="◄", width=3, style='Big.TButton', command=lambda: self.adjust_angle('right', -1)).pack(side=tk.LEFT, padx=1)
+            ttk.Button(right_btn_frame, text="►", width=3, style='Big.TButton', command=lambda: self.adjust_angle('right', 1)).pack(side=tk.LEFT, padx=1)
+            ttk.Button(right_btn_frame, text="►►", width=3, style='Big.TButton', command=lambda: self.adjust_angle('right', 10)).pack(side=tk.LEFT, padx=1)
             
             # Test-Buttons
             test_frame = ttk.Frame(main_frame)
             test_frame.pack(fill=tk.X, pady=10)
-            ttk.Button(test_frame, text="Test Links", command=lambda: self.test_position('left')).pack(side=tk.LEFT, expand=True, padx=5)
-            ttk.Button(test_frame, text="Test Mitte", command=lambda: self.test_position('center')).pack(side=tk.LEFT, expand=True, padx=5)
-            ttk.Button(test_frame, text="Test Rechts", command=lambda: self.test_position('right')).pack(side=tk.LEFT, expand=True, padx=5)
+            ttk.Button(test_frame, text="Test Links", style='Big.TButton', command=lambda: self.test_position('left')).pack(side=tk.LEFT, expand=True, padx=5)
+            ttk.Button(test_frame, text="Test Mitte", style='Big.TButton', command=lambda: self.test_position('center')).pack(side=tk.LEFT, expand=True, padx=5)
+            ttk.Button(test_frame, text="Test Rechts", style='Big.TButton', command=lambda: self.test_position('right')).pack(side=tk.LEFT, expand=True, padx=5)
             
             # Speichern und Abbrechen Buttons
             btn_frame = ttk.Frame(main_frame)
@@ -439,11 +416,12 @@ class WeichensteuerungGUI(tk.Tk):
             
             ttk.Button(btn_frame, 
                       text="Speichern",
-                      command=self.save_calibration,
-                      style='Accent.TButton').pack(side=tk.LEFT, expand=True, padx=5)
+                      style='Big.TButton',
+                      command=self.save_calibration).pack(side=tk.LEFT, expand=True, padx=5)
                       
             ttk.Button(btn_frame,
                       text="Abbrechen",
+                      style='Big.TButton',
                       command=self.cal_window.destroy).pack(side=tk.LEFT, expand=True, padx=5)
             
             # Mache Fenster modal
@@ -518,7 +496,7 @@ class WeichensteuerungGUI(tk.Tk):
         self.notebook.add(track_frame, text='Gleiskarte')
         
         # TODO: Implementiere Gleiskarte
-        ttk.Label(track_frame, text="Gleiskarte wird noch implementiert").pack(pady=20)
+        ttk.Label(track_frame, text="Gleiskarte wird noch implementiert", style='Normal.TLabel').pack(pady=20)
         
         self.logger.debug("Gleiskarten-Tab erstellt")
 
@@ -531,7 +509,7 @@ class WeichensteuerungGUI(tk.Tk):
         self.notebook.add(status_frame, text='Status')
         
         # Status-Informationen
-        ttk.Label(status_frame, text="Servo-Controller Status:").pack(pady=(20,5))
+        ttk.Label(status_frame, text="Servo-Controller Status:", style='Header.TLabel').pack(pady=(20,5))
         
         # Status-Text
         status_text = tk.Text(status_frame, height=10, width=50)
@@ -553,6 +531,7 @@ class WeichensteuerungGUI(tk.Tk):
         # Aktualisieren-Button
         ttk.Button(status_frame, 
                   text="Aktualisieren",
+                  style='Big.TButton',
                   command=self.update_status).pack(pady=10)
         
         self.logger.debug("Status-Tab erstellt")
@@ -570,16 +549,28 @@ class WeichensteuerungGUI(tk.Tk):
         info_frame.pack(fill=tk.X, padx=10, pady=5)
         
         # Version und Copyright
-        ttk.Label(info_frame, text="Viessmann Weichensteuerung", font=('Helvetica', 12, 'bold')).pack(pady=5)
-        ttk.Label(info_frame, text="Version 1.0").pack()
-        ttk.Label(info_frame, text=" 2024 EinsPommes").pack(pady=5)
+        ttk.Label(info_frame, text="Car Motion System", style='Title.TLabel').pack(pady=5)
+        ttk.Label(info_frame, text="Version 1.0", style='Normal.TLabel').pack()
+        ttk.Label(info_frame, text=" 2024 EinsPommes", style='Normal.TLabel').pack(pady=5)
         
         # Beschreibung
         desc_text = """
-        Diese Software ermöglicht die Steuerung von bis zu 16 Servomotoren für Modellbahn-Weichen.
-        Die Servos können einzeln kalibriert und gesteuert werden.
-        """
-        ttk.Label(info_frame, text=desc_text, wraplength=400, justify=tk.CENTER).pack(pady=10)
+        Diese Software ermöglicht die Steuerung von bis zu 16 Servomotoren für Ihr Fahrzeug.
+        Die Servos können einzeln kalibriert und gesteuert werden,
+        um präzise Bewegungen zu ermöglichen.
+        Die Steuerung erfolgt wahlweise über die grafische
+        Oberfläche oder über das Webinterface."""
+        ttk.Label(info_frame, text=desc_text, wraplength=400, justify=tk.CENTER, style='Normal.TLabel').pack(pady=10)
+        
+        # IP-Adresse
+        ip_frame = ttk.Frame(settings_frame)
+        ip_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        self.ip_label = ttk.Label(ip_frame, text="IP-Adresse: ...", style='Normal.TLabel')
+        self.ip_label.pack()
+        
+        # Aktualisiere IP-Adresse
+        self.update_ip()
         
         # I2C Einstellungen
         i2c_frame = ttk.LabelFrame(settings_frame, text="I2C Einstellungen", padding="10")
@@ -588,14 +579,14 @@ class WeichensteuerungGUI(tk.Tk):
         # Status der I2C Boards
         board1_frame = ttk.Frame(i2c_frame)
         board1_frame.pack(fill=tk.X, pady=2)
-        ttk.Label(board1_frame, text="Board 1 (0x40):").pack(side=tk.LEFT, padx=5)
-        self.board1_status = ttk.Label(board1_frame, text="Verbunden" if self.servo_controller.kit1 else "Nicht verbunden")
+        ttk.Label(board1_frame, text="Board 1 (0x40):", style='Normal.TLabel').pack(side=tk.LEFT, padx=5)
+        self.board1_status = ttk.Label(board1_frame, text="Verbunden" if self.servo_controller.kit1 else "Nicht verbunden", style='Normal.TLabel')
         self.board1_status.pack(side=tk.LEFT)
         
         board2_frame = ttk.Frame(i2c_frame)
         board2_frame.pack(fill=tk.X, pady=2)
-        ttk.Label(board2_frame, text="Board 2 (0x41):").pack(side=tk.LEFT, padx=5)
-        self.board2_status = ttk.Label(board2_frame, text="Verbunden" if self.servo_controller.dual_board else "Nicht verbunden")
+        ttk.Label(board2_frame, text="Board 2 (0x41):", style='Normal.TLabel').pack(side=tk.LEFT, padx=5)
+        self.board2_status = ttk.Label(board2_frame, text="Verbunden" if self.servo_controller.dual_board else "Nicht verbunden", style='Normal.TLabel')
         self.board2_status.pack(side=tk.LEFT)
         
         # Konfiguration
@@ -605,8 +596,8 @@ class WeichensteuerungGUI(tk.Tk):
         # Konfigurationsdatei
         config_file_frame = ttk.Frame(config_frame)
         config_file_frame.pack(fill=tk.X, pady=2)
-        ttk.Label(config_file_frame, text="Konfigurationsdatei:").pack(side=tk.LEFT, padx=5)
-        ttk.Label(config_file_frame, text=self.servo_controller.config_file).pack(side=tk.LEFT)
+        ttk.Label(config_file_frame, text="Konfigurationsdatei:", style='Normal.TLabel').pack(side=tk.LEFT, padx=5)
+        ttk.Label(config_file_frame, text=self.servo_controller.config_file, style='Normal.TLabel').pack(side=tk.LEFT)
         
         # Buttons für Konfiguration
         btn_frame = ttk.Frame(config_frame)
@@ -614,10 +605,12 @@ class WeichensteuerungGUI(tk.Tk):
         
         ttk.Button(btn_frame, 
                   text="Konfiguration neu laden",
+                  style='Big.TButton',
                   command=self.reload_config).pack(side=tk.LEFT, padx=5)
                   
         ttk.Button(btn_frame,
                   text="Konfiguration zurücksetzen",
+                  style='Big.TButton',
                   command=self.reset_config).pack(side=tk.LEFT, padx=5)
         
         # Programm-Steuerung
@@ -630,12 +623,14 @@ class WeichensteuerungGUI(tk.Tk):
         # Update-Button
         update_btn = ttk.Button(control_btn_frame,
                               text="Nach Updates suchen",
+                              style='Big.TButton',
                               command=self.check_for_updates)
         update_btn.pack(side=tk.LEFT, padx=5)
         
         # Beenden-Button
         exit_btn = ttk.Button(control_btn_frame,
                             text="Programm beenden",
+                            style='Big.TButton',
                             command=self.quit_program)
         exit_btn.pack(side=tk.RIGHT, padx=5)
                   
@@ -646,7 +641,8 @@ class WeichensteuerungGUI(tk.Tk):
         link_label = ttk.Label(link_frame, 
                              text="GitHub Repository", 
                              foreground="blue", 
-                             cursor="hand2")
+                             cursor="hand2",
+                             style='Normal.TLabel')
         link_label.pack()
         link_label.bind("<Button-1>", lambda e: webbrowser.open("https://github.com/EinsPommes"))
         
@@ -708,7 +704,7 @@ class WeichensteuerungGUI(tk.Tk):
                 # Hole Servo-Status
                 state = self.servo_controller.servo_states[servo_id]
                 
-                # Hole Position vom Controller
+                # Hole Position vom Controller falls nicht angegeben
                 position = state.get('position')
                 
                 # Aktualisiere Positions-Label
@@ -889,33 +885,38 @@ class WeichensteuerungGUI(tk.Tk):
         # LED
         canvas = tk.Canvas(status_frame, width=20, height=20)
         canvas.pack(side=tk.LEFT, padx=2)
+        
+        # LED (Kreis) zeichnen
         led = canvas.create_oval(5, 5, 15, 15, fill='gray')
+        self.servo_leds[servo_id] = (canvas, led)
+        self.logger.debug(f"LED Canvas für Servo {servo_id+1} erstellt")
         
-        # Positions-Label
-        pos_label = ttk.Label(status_frame, text="--")
-        pos_label.pack(side=tk.LEFT, padx=5)
+        # Label für Servo-Nummer
+        ttk.Label(servo_frame, text=f"Servo {servo_id + 1}", style='Normal.TLabel').pack()
         
-        # Steuerungsbuttons
-        button_frame = ttk.Frame(servo_frame)
-        button_frame.pack(fill=tk.X, padx=5, pady=2)
+        # Label für Position
+        pos_label = ttk.Label(servo_frame, text="---", style='Normal.TLabel')
+        pos_label.pack()
+        self.position_labels[servo_id] = pos_label
+        self.logger.debug(f"Position Label für Servo {servo_id+1} erstellt")
+        
+        # Button-Frame
+        btn_frame = ttk.Frame(servo_frame)
+        btn_frame.pack(pady=2)
         
         # Links-Button
-        left_btn = ttk.Button(
-            button_frame, 
-            text="←", 
-            width=3,
-            command=lambda: self.move_servo(servo_id, 'left')
-        )
-        left_btn.pack(side=tk.LEFT, padx=1)
+        ttk.Button(btn_frame, 
+                  text="←", 
+                  width=3,
+                  style='Big.TButton',
+                  command=lambda s=servo_id: self.move_servo(s, 'left')).pack(side=tk.LEFT, padx=1)
         
         # Rechts-Button
-        right_btn = ttk.Button(
-            button_frame, 
-            text="→", 
-            width=3,
-            command=lambda: self.move_servo(servo_id, 'right')
-        )
-        right_btn.pack(side=tk.LEFT, padx=1)
+        ttk.Button(btn_frame, 
+                  text="→", 
+                  width=3,
+                  style='Big.TButton',
+                  command=lambda s=servo_id: self.move_servo(s, 'right')).pack(side=tk.LEFT, padx=1)
         
         return servo_frame, canvas, led, pos_label
 
@@ -1095,6 +1096,23 @@ class WeichensteuerungGUI(tk.Tk):
         except Exception as e:
             self.logger.error(f"Fehler beim Speichern der Kalibrierung: {e}")
             messagebox.showerror("Fehler", str(e))
+
+    def get_ip_address(self):
+        """Ermittelt die IP-Adresse"""
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            return "127.0.0.1"
+
+    def update_ip(self):
+        """Aktualisiert die IP-Adresse in der GUI"""
+        ip = self.get_ip_address()
+        self.ip_label.config(text=f"IP-Adresse: {ip}:5000")
+        self.after(5000, self.update_ip)  # Erneut in 5 Sekunden
 
 def main():
     try:
