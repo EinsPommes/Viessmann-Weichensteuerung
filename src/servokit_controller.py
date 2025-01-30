@@ -462,6 +462,11 @@ class ServoKitController:
         # Test-Winkel für die Initialisierung
         test_left = 70   # Linke Testposition
         test_right = 90  # Rechte Testposition
+        
+        # PWM Werte berechnen (basierend auf 16-bit Timer)
+        # Bei 50Hz: duty_cycle = pulsewidth_ms * 3277
+        PWM_70 = int((1.5 + (70 - 90) * 0.01) * 3277)  # PWM für 70 Grad
+        PWM_90 = int((1.5 + (90 - 90) * 0.01) * 3277)  # PWM für 90 Grad
             
         # Initialisiere jeden Servo
         for i, servo_config in enumerate(servo_configs):
@@ -480,16 +485,46 @@ class ServoKitController:
                 self.logger.info(f"Initialisiere Servo {i} mit Test-Bereich {test_left}° - {test_right}°")
                 
                 try:
-                    # Setze auf linke Test-Position
-                    self.move_to_angle(self.kit1.servo[i], 80, test_left, step_size=1)
-                    time.sleep(0.5)  # Warte eine halbe Sekunde
+                    # Starte von der Mittelposition
+                    current_pwm = PWM_90
                     
-                    # Setze auf rechte Test-Position
-                    self.move_to_angle(self.kit1.servo[i], test_left, test_right, step_size=1)
-                    time.sleep(0.5)  # Warte eine halbe Sekunde
+                    # Setze PWM Frequenz auf 50Hz
+                    if i < 16:
+                        self.kit1._pca.frequency = 50
+                        servo = self.kit1._pca.channels[i]
+                    else:
+                        if not self.dual_board:
+                            raise Exception("Zweites Board nicht verfügbar")
+                        self.kit2._pca.frequency = 50
+                        servo = self.kit2._pca.channels[i-16]
                     
-                    # Zurück zur linken Position
-                    self.move_to_angle(self.kit1.servo[i], test_right, test_left, step_size=1)
+                    # Sehr langsam auf 70° bewegen
+                    target_pwm = PWM_70
+                    step = 1 if target_pwm > current_pwm else -1
+                    for pwm in range(current_pwm, target_pwm, step):
+                        servo.duty_cycle = pwm
+                        time.sleep(0.1)  # 100ms Pause zwischen PWM-Schritten
+                    servo.duty_cycle = target_pwm
+                    time.sleep(1.0)  # 1 Sekunde warten
+                    
+                    # Sehr langsam auf 90° bewegen
+                    current_pwm = PWM_70
+                    target_pwm = PWM_90
+                    step = 1 if target_pwm > current_pwm else -1
+                    for pwm in range(current_pwm, target_pwm, step):
+                        servo.duty_cycle = pwm
+                        time.sleep(0.1)  # 100ms Pause zwischen PWM-Schritten
+                    servo.duty_cycle = target_pwm
+                    time.sleep(1.0)  # 1 Sekunde warten
+                    
+                    # Sehr langsam zurück auf 70° bewegen
+                    current_pwm = PWM_90
+                    target_pwm = PWM_70
+                    step = 1 if target_pwm > current_pwm else -1
+                    for pwm in range(current_pwm, target_pwm, step):
+                        servo.duty_cycle = pwm
+                        time.sleep(0.1)  # 100ms Pause zwischen PWM-Schritten
+                    servo.duty_cycle = target_pwm
                     
                     # Markiere als erfolgreich initialisiert
                     self.servo_states[str(i)].update({
