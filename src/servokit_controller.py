@@ -447,14 +447,13 @@ class ServoKitController:
             self.logger.error("Keine Servo-Konfigurationen gefunden!")
             return
             
+        # Test-Winkel für die Initialisierung
+        test_left = 70   # Linke Testposition
+        test_right = 90  # Rechte Testposition
+            
         # Initialisiere jeden Servo
         for i, servo_config in enumerate(servo_configs):
             try:
-                # Hole Konfigurationswerte
-                left_angle = float(servo_config.get('left_angle', 0))
-                right_angle = float(servo_config.get('right_angle', 180))
-                speed = float(servo_config.get('speed', 0.1))
-                
                 # Initialisiere Status
                 self.servo_states[str(i)] = {
                     'position': None,
@@ -462,33 +461,28 @@ class ServoKitController:
                     'last_move': 0,
                     'error': False,
                     'initialized': False,
-                    'status': 'unknown',
-                    'config': {
-                        'left_angle': left_angle,
-                        'right_angle': right_angle,
-                        'speed': speed
-                    }
+                    'status': 'unknown'
                 }
                 
-                # Teste den Servo mit den konfigurierten Winkeln
-                self.logger.info(f"Initialisiere Servo {i} (Links: {left_angle}°, Rechts: {right_angle}°, Geschwindigkeit: {speed})")
+                # Teste den Servo mit den Test-Winkeln
+                self.logger.info(f"Initialisiere Servo {i} mit Test-Bereich {test_left}° - {test_right}°")
                 
                 try:
-                    # Setze auf linke Position
-                    self.set_angle(i, left_angle, steps=20)
+                    # Setze auf linke Test-Position
+                    self.kit1.servo[i].angle = test_left
                     time.sleep(0.1)
                     
-                    # Setze auf rechte Position
-                    self.set_angle(i, right_angle, steps=20)
+                    # Setze auf rechte Test-Position
+                    self.kit1.servo[i].angle = test_right
                     time.sleep(0.1)
                     
                     # Zurück zur linken Position
-                    self.set_angle(i, left_angle, steps=20)
+                    self.kit1.servo[i].angle = test_left
                     
                     # Markiere als erfolgreich initialisiert
                     self.servo_states[str(i)].update({
                         'position': 'left',
-                        'current_angle': left_angle,
+                        'current_angle': test_left,
                         'initialized': True,
                         'status': 'initialized'
                     })
@@ -510,6 +504,4 @@ class ServoKitController:
                     'error': True
                 }
         
-        # Speichere den Status
-        self.save_config()
         self.logger.info("Servo-Initialisierung abgeschlossen")
