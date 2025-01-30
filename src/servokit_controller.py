@@ -497,7 +497,7 @@ class ServoKitController:
                     
                     # Starte bei 90°
                     servo.duty_cycle = PWM_90
-                    time.sleep(1.0)  # 1 Sekunde warten
+                    time.sleep(0.5)  # Eine halbe Sekunde warten
                     
                     # Sehr langsam auf 85° bewegen
                     current_pwm = PWM_90
@@ -505,7 +505,7 @@ class ServoKitController:
                     step = -1  # Bewegung ist immer abwärts
                     for pwm in range(current_pwm, target_pwm, step):
                         servo.duty_cycle = pwm
-                        time.sleep(0.1)  # 100ms Pause zwischen PWM-Schritten
+                        time.sleep(0.01)  # 10ms Pause zwischen PWM-Schritten
                     servo.duty_cycle = target_pwm
                     
                     # Markiere als erfolgreich initialisiert
