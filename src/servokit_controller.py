@@ -13,7 +13,7 @@ class ServoKitController:
     DEFAULT_CONFIG = {
         'left_angle': 30.0,    # Standardwinkel für linke Position
         'right_angle': 150.0,  # Standardwinkel für rechte Position
-        'speed': 0.5          # Standard-Geschwindigkeit
+        'speed': 0.1          # Standard-Geschwindigkeit
     }
     
     def __init__(self):
@@ -24,15 +24,24 @@ class ServoKitController:
             self.logger.setLevel(logging.DEBUG)
             
             # Config-Datei
-            self.config_file = "servo_config.json"
+            self.config_file = "src/config.json"
+            
+            # Lade Konfiguration
+            self.config = self.load_config()
             
             # Erstelle I2C Bus
             self.i2c = busio.I2C(board.SCL, board.SDA)
+            
+            # PCA9685 Register-Adressen
+            MODE1 = 0x00
+            PRESCALE = 0xFE
+            LED0_ON_L = 0x06
             
             # Erstelle ServoKit für Board 1
             self.kit1 = ServoKit(channels=16, i2c=self.i2c, address=0x40)
             self.kit1._pca.frequency = 50  # Setze Frequenz auf 50Hz
             
+<<<<<<< HEAD
             # PWM Werte für verschiedene Positionen (basierend auf 16-bit Timer)
             self.PWM_LEFT = 2500    # 0.76ms = -90° (links)
             self.PWM_CENTER = 4915  # 1.5ms = 0° (mitte)
@@ -58,6 +67,59 @@ class ServoKitController:
                     'status': 'initialized'
                 }
             
+=======
+            # Setze alle Kanäle auf 0 bevor wir die Frequenz ändern
+            for i in range(16):
+                reg_base = LED0_ON_L + (i * 4)
+                self.kit1._pca._write_byte(reg_base, 0)
+                self.kit1._pca._write_byte(reg_base + 1, 0)
+                self.kit1._pca._write_byte(reg_base + 2, 0)
+                self.kit1._pca._write_byte(reg_base + 3, 0)
+            
+            # Setze die PWM-Frequenz auf 50Hz (Standard für Servos)
+            self.kit1._pca.frequency = 50
+            
+            # Setze alle Servos auf Mittelposition (1.5ms Puls)
+            pulse_width = int(1.5 * 4096 / 20)  # 1.5ms bei 50Hz
+            for i in range(16):
+                reg_base = LED0_ON_L + (i * 4)
+                self.kit1._pca._write_byte(reg_base + 2, pulse_width & 0xFF)
+                self.kit1._pca._write_byte(reg_base + 3, (pulse_width >> 8) & 0x0F)
+            
+            self.logger.info("ServoKit 1 (0x40) erfolgreich initialisiert")
+            
+            # Versuche zweites Board zu initialisieren
+            try:
+                self.kit2 = ServoKit(channels=16, i2c=self.i2c, address=0x41)
+                self.dual_board = True
+                
+                # Das gleiche für Board 2
+                for i in range(16):
+                    reg_base = LED0_ON_L + (i * 4)
+                    self.kit2._pca._write_byte(reg_base, 0)
+                    self.kit2._pca._write_byte(reg_base + 1, 0)
+                    self.kit2._pca._write_byte(reg_base + 2, 0)
+                    self.kit2._pca._write_byte(reg_base + 3, 0)
+                
+                self.kit2._pca.frequency = 50
+                
+                for i in range(16):
+                    reg_base = LED0_ON_L + (i * 4)
+                    self.kit2._pca._write_byte(reg_base + 2, pulse_width & 0xFF)
+                    self.kit2._pca._write_byte(reg_base + 3, (pulse_width >> 8) & 0x0F)
+                
+                self.logger.info("Zweites PCA9685 Board gefunden")
+            except Exception as e:
+                self.kit2 = None
+                self.dual_board = False
+                self.logger.warning(f"Zweites Board nicht gefunden, nutze nur Board 1: {str(e)}")
+            
+            # Servo-Status initialisieren
+            self.servo_states = {}
+            
+            self.logger.info("Servo-Controller erfolgreich initialisiert")
+            
+>>>>>>> 0040156a9d902821e6b3f4f85bd2630116956bdf
         except Exception as e:
             self.logger.error(f"Fehler bei der Initialisierung: {str(e)}")
             raise
@@ -93,7 +155,14 @@ class ServoKitController:
                 raise Exception("Board nicht verfügbar")
 
             # Hole Konfiguration für den Servo
+<<<<<<< HEAD
             config = self.config.get(str(servo_id), self.DEFAULT_CONFIG)
+=======
+            servo_config = self.config.get(str(servo_num), {})
+            left_angle = float(servo_config.get('left_angle', 30.0))  # Standard: 30°
+            right_angle = float(servo_config.get('right_angle', 150.0))  # Standard: 150°
+            speed = float(servo_config.get('speed', 0.1))
+>>>>>>> 0040156a9d902821e6b3f4f85bd2630116956bdf
             
             # Setze Winkel basierend auf Richtung
             if direction == 'left':
@@ -101,8 +170,20 @@ class ServoKitController:
             else:
                 angle = config['right_angle']
                 
+<<<<<<< HEAD
             # Bewege Servo
             self.kit1.servo[servo_id].angle = angle
+=======
+            # Hole aktuellen Winkel
+            current_angle = self.servo_states[str(servo_num)].get('current_angle', target_angle)
+            
+            # Berechne Schritte basierend auf der Geschwindigkeit
+            steps = int(abs(target_angle - current_angle) / speed)
+            steps = max(10, min(steps, 100))  # Mindestens 10, maximal 100 Schritte
+            
+            # Setze Winkel schrittweise
+            self.set_angle(servo_num, target_angle, steps=steps)
+>>>>>>> 0040156a9d902821e6b3f4f85bd2630116956bdf
             
             # Aktualisiere Status
             self.servo_states[str(servo_id)].update({
@@ -153,8 +234,19 @@ class ServoKitController:
                 config[str(i)] = {
                     'left_angle': 30,
                     'right_angle': 150,
-                    'speed': 0.5
+                    'speed': 0.1
                 }
+<<<<<<< HEAD
+=======
+                
+            if self.dual_board:
+                for i in range(16):  # Zweites Board
+                    config[str(i+16)] = {
+                        'left_angle': 30,
+                        'right_angle': 150,
+                        'speed': 0.1
+                    }
+>>>>>>> 0040156a9d902821e6b3f4f85bd2630116956bdf
             
             # Speichere Konfiguration
             self.config = config
@@ -167,6 +259,52 @@ class ServoKitController:
             self.logger.error(f"Fehler beim Erstellen der Standard-Konfiguration: {e}")
             raise
             
+<<<<<<< HEAD
+=======
+    def load_config(self):
+        """Lädt die Konfiguration aus der Datei"""
+        try:
+            # Prüfe ob Datei existiert
+            if not os.path.exists(self.config_file):
+                self.logger.warning(f"Konfigurationsdatei {self.config_file} nicht gefunden")
+                return self.create_default_config()
+                
+            # Lade Konfiguration
+            with open(self.config_file, 'r') as f:
+                config = json.load(f)
+                
+            # Prüfe ob Konfiguration gültig ist
+            if not isinstance(config, dict):
+                raise ValueError("Ungültiges Konfigurations-Format")
+                
+            # Füge fehlende Servos hinzu
+            for i in range(16):  # Erstes Board
+                if str(i) not in config:
+                    self.logger.warning(f"Servo {i} nicht in Konfiguration gefunden, füge Standard-Konfiguration hinzu")
+                    config[str(i)] = {
+                        'left_angle': 30,
+                        'right_angle': 150,
+                        'speed': 0.1
+                    }
+                    
+            if self.dual_board:
+                for i in range(16):  # Zweites Board
+                    if str(i+16) not in config:
+                        self.logger.warning(f"Servo {i+16} nicht in Konfiguration gefunden, füge Standard-Konfiguration hinzu")
+                        config[str(i+16)] = {
+                            'left_angle': 30,
+                            'right_angle': 150,
+                            'speed': 0.1
+                        }
+            
+            self.logger.info("Konfiguration erfolgreich geladen")
+            return config
+            
+        except Exception as e:
+            self.logger.error(f"Fehler beim Laden der Konfiguration: {e}")
+            return self.create_default_config()
+            
+>>>>>>> 0040156a9d902821e6b3f4f85bd2630116956bdf
     def save_config(self):
         """Speichert die Konfiguration in der JSON-Datei"""
         try:
@@ -206,9 +344,10 @@ class ServoKitController:
             self.logger.error(f"Fehler beim Speichern der Konfiguration: {e}")
             raise
             
-    def set_angle(self, servo_num: int, angle: float) -> None:
+    def set_angle(self, servo_num: int, angle: float, steps=10) -> None:
         """Setzt einen Servo auf einen bestimmten Winkel"""
         try:
+<<<<<<< HEAD
             # Validiere Winkel
             if not (0 <= angle <= 180):
                 raise ValueError(f"Winkel muss zwischen 0° und 180° liegen (war: {angle})")
@@ -219,11 +358,68 @@ class ServoKitController:
             self.kit1.servo[servo_num].angle = angle
                 
             self.logger.debug(f"Setze Servo {servo_num} auf {angle}°")
+=======
+            # Bestimme Board und Channel
+            if servo_num < 16:
+                kit = self.kit1
+                channel = servo_num
+            else:
+                if not self.dual_board:
+                    raise Exception("Zweites Board nicht verfügbar")
+                kit = self.kit2
+                channel = servo_num - 16
+            
+            # Hole Servo-Konfiguration
+            servo_config = self.config.get('SERVO_CONFIG', {}).get('SERVOS', [])[servo_num]
+            left_angle = float(servo_config.get('left_angle', 0))
+            right_angle = float(servo_config.get('right_angle', 180))
+            
+            # Validiere Winkel
+            if not (left_angle <= angle <= right_angle):
+                raise ValueError(f"Winkel {angle} außerhalb des erlaubten Bereichs ({left_angle}° - {right_angle}°)")
+            
+            # Hole aktuellen Winkel
+            current_angle = self.servo_states[str(servo_num)].get('current_angle')
+            if current_angle is None:
+                current_angle = angle
+            
+            # Berechne Schritte
+            angle_diff = angle - current_angle
+            angle_step = angle_diff / steps if steps > 0 else angle_diff
+            
+            # Bewege schrittweise
+            for step in range(steps):
+                current_angle += angle_step
+                # Normalisiere den Winkel auf den Servo-Bereich
+                normalized_angle = ((current_angle - left_angle) / (right_angle - left_angle)) * 180
+                kit.servo[channel].angle = normalized_angle
+                time.sleep(0.02)  # 20ms Pause zwischen den Schritten
+            
+            # Stelle sicher, dass der endgültige Winkel exakt stimmt
+            normalized_angle = ((angle - left_angle) / (right_angle - left_angle)) * 180
+            kit.servo[channel].angle = normalized_angle
+            
+            # Aktualisiere Status
+            self.servo_states[str(servo_num)]['current_angle'] = angle
+>>>>>>> 0040156a9d902821e6b3f4f85bd2630116956bdf
             
         except Exception as e:
-            self.logger.error(f"Fehler beim Setzen des Winkels für Servo {servo_num + 1}: {e}")
+            self.logger.error(f"Fehler beim Setzen des Winkels für Servo {servo_num}: {e}")
+            self.servo_states[str(servo_num)]['error'] = True
             raise
             
+    def move_to_angle(self, servo, current_angle, target_angle, step_size=1):
+        """Bewegt einen Servo langsam zu einem Zielwinkel"""
+        if current_angle < target_angle:
+            for angle in range(int(current_angle), int(target_angle), step_size):
+                servo.angle = angle
+                time.sleep(0.05)  # 50ms Pause zwischen den Schritten
+        else:
+            for angle in range(int(current_angle), int(target_angle), -step_size):
+                servo.angle = angle
+                time.sleep(0.05)  # 50ms Pause zwischen den Schritten
+        servo.angle = target_angle  # Stelle sicher, dass der endgültige Winkel exakt erreicht wird
+        
     def calibrate_servo(self, servo_id, left_angle, right_angle):
         """Kalibriert einen Servo mit neuen Winkeln"""
         try:
@@ -330,8 +526,9 @@ class ServoKitController:
             
     def initialize_servos(self):
         """Initialisiert und testet alle Servos"""
-        self.logger.info("Teste alle Servos...")
+        self.logger.info("Initialisiere alle Servos...")
         
+<<<<<<< HEAD
         # Teste jeden Servo
         for i in range(16):
             # Initialisiere Status
@@ -343,23 +540,80 @@ class ServoKitController:
                 'initialized': True,
                 'status': 'initialized'
             }
+=======
+        # Lade die Servo-Konfigurationen
+        servo_configs = self.config.get('SERVO_CONFIG', {}).get('SERVOS', [])
+        if not servo_configs:
+            self.logger.error("Keine Servo-Konfigurationen gefunden!")
+            return
+>>>>>>> 0040156a9d902821e6b3f4f85bd2630116956bdf
             
-            # Teste den Servo
-            if self.test_servo(i):
-                self.servo_states[str(i)].update({
-                    'position': 'left',
-                    'current_angle': 30,
-                    'initialized': True,
-                    'status': 'initialized'
-                })
-                self.logger.info(f"Servo {i} gefunden und initialisiert")
-            else:
-                self.servo_states[str(i)].update({
+        # Test-Winkel für die Initialisierung
+        start_angle = 90.0  # Startposition
+        end_angle = 85.0    # Endposition
+        step_size = 0.1     # Sehr kleine Schritte für sanfte Bewegung
+            
+        # Initialisiere jeden Servo
+        for i, servo_config in enumerate(servo_configs):
+            try:
+                # Initialisiere Status
+                self.servo_states[str(i)] = {
+                    'position': None,
+                    'current_angle': None,
+                    'last_move': 0,
+                    'error': False,
                     'initialized': False,
-                    'status': 'not_found'
-                })
-                self.logger.warning(f"Servo {i} nicht gefunden oder nicht funktionsfähig")
+                    'status': 'unknown'
+                }
                 
-        # Speichere den Status
-        self.save_config()
+                # Teste den Servo
+                self.logger.info(f"Initialisiere Servo {i} mit Bewegung von {start_angle}° nach {end_angle}°")
+                
+                try:
+                    # Hole den richtigen Servo
+                    if i < 16:
+                        servo = self.kit1.servo[i]
+                    else:
+                        if not self.dual_board:
+                            raise Exception("Zweites Board nicht verfügbar")
+                        servo = self.kit2.servo[i-16]
+                    
+                    # Setze auf Startposition
+                    servo.angle = start_angle
+                    time.sleep(0.5)  # Warte eine halbe Sekunde
+                    
+                    # Bewege sehr langsam zur Endposition
+                    current_angle = start_angle
+                    while current_angle > end_angle:
+                        current_angle -= step_size
+                        if current_angle < end_angle:
+                            current_angle = end_angle
+                        servo.angle = current_angle
+                        time.sleep(0.01)  # 10ms Pause zwischen den Schritten
+                    
+                    # Markiere als erfolgreich initialisiert
+                    self.servo_states[str(i)].update({
+                        'position': 'initialized',
+                        'current_angle': end_angle,
+                        'initialized': True,
+                        'status': 'initialized'
+                    })
+                    self.logger.info(f"Servo {i} erfolgreich initialisiert")
+                    
+                except Exception as e:
+                    self.servo_states[str(i)].update({
+                        'initialized': False,
+                        'status': 'error',
+                        'error': True
+                    })
+                    self.logger.warning(f"Fehler bei der Initialisierung von Servo {i}: {str(e)}")
+                
+            except Exception as e:
+                self.logger.error(f"Fehler beim Laden der Konfiguration für Servo {i}: {str(e)}")
+                self.servo_states[str(i)] = {
+                    'initialized': False,
+                    'status': 'config_error',
+                    'error': True
+                }
+        
         self.logger.info("Servo-Initialisierung abgeschlossen")
