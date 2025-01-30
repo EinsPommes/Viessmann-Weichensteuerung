@@ -306,6 +306,18 @@ class ServoKitController:
             self.servo_states[str(servo_num)]['error'] = True
             raise
             
+    def move_to_angle(self, servo, current_angle, target_angle, step_size=1):
+        """Bewegt einen Servo langsam zu einem Zielwinkel"""
+        if current_angle < target_angle:
+            for angle in range(int(current_angle), int(target_angle), step_size):
+                servo.angle = angle
+                time.sleep(0.05)  # 50ms Pause zwischen den Schritten
+        else:
+            for angle in range(int(current_angle), int(target_angle), -step_size):
+                servo.angle = angle
+                time.sleep(0.05)  # 50ms Pause zwischen den Schritten
+        servo.angle = target_angle  # Stelle sicher, dass der endgültige Winkel exakt erreicht wird
+        
     def calibrate_servo(self, servo_id, left_angle, right_angle):
         """Kalibriert einen Servo mit neuen Winkeln"""
         try:
@@ -469,15 +481,15 @@ class ServoKitController:
                 
                 try:
                     # Setze auf linke Test-Position
-                    self.kit1.servo[i].angle = test_left
-                    time.sleep(0.1)
+                    self.move_to_angle(self.kit1.servo[i], 80, test_left, step_size=1)
+                    time.sleep(0.5)  # Warte eine halbe Sekunde
                     
                     # Setze auf rechte Test-Position
-                    self.kit1.servo[i].angle = test_right
-                    time.sleep(0.1)
+                    self.move_to_angle(self.kit1.servo[i], test_left, test_right, step_size=1)
+                    time.sleep(0.5)  # Warte eine halbe Sekunde
                     
                     # Zurück zur linken Position
-                    self.kit1.servo[i].angle = test_left
+                    self.move_to_angle(self.kit1.servo[i], test_right, test_left, step_size=1)
                     
                     # Markiere als erfolgreich initialisiert
                     self.servo_states[str(i)].update({
