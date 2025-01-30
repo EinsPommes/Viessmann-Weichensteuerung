@@ -334,7 +334,7 @@ class WeichensteuerungGUI(tk.Tk):
             self.current_servo = int(servo_str.split()[1]) - 1  # "Servo 1" -> 0
             
             # Prüfe ob Servo verfügbar
-            if self.current_servo >= 8 and not self.servo_controller.dual_board:
+            if self.current_servo >= 16 and not self.servo_controller.kit2:
                 raise Exception(f"Servo {self.current_servo + 1} nicht verfügbar (kein zweites Board)")
             
             # Hole aktuelle Konfiguration oder setze Standardwerte
@@ -474,12 +474,12 @@ class WeichensteuerungGUI(tk.Tk):
                 angle = 90.0
                 
             # Setze Winkel
-            if self.current_servo < 8:
+            if self.current_servo < 16:
                 self.servo_controller.kit1.servo[self.current_servo].angle = angle
             else:
-                if not self.servo_controller.dual_board:
+                if not self.servo_controller.kit2:
                     raise Exception("Zweites Board nicht verfügbar")
-                self.servo_controller.kit2.servo[self.current_servo-8].angle = angle
+                self.servo_controller.kit2.servo[self.current_servo-16].angle = angle
                 
             self.logger.info(f"Test: Servo {self.current_servo + 1} auf {angle}° gesetzt")
             
@@ -518,7 +518,6 @@ class WeichensteuerungGUI(tk.Tk):
         # Füge Status-Informationen hinzu
         status_info = [
             f"ServoKit 1 (0x40): {'Verbunden' if self.servo_controller.kit1 else 'Nicht verbunden'}",
-            f"ServoKit 2 (0x41): {'Verbunden' if self.servo_controller.dual_board else 'Nicht verbunden'}",
             f"Aktive Servos: {len([s for s in range(16) if self.servo_controller.get_servo_status(s)['initialized']])}/16",
             f"Software-Version: 1.0.0"
         ]
@@ -582,12 +581,6 @@ class WeichensteuerungGUI(tk.Tk):
         ttk.Label(board1_frame, text="Board 1 (0x40):", style='Normal.TLabel').pack(side=tk.LEFT, padx=5)
         self.board1_status = ttk.Label(board1_frame, text="Verbunden" if self.servo_controller.kit1 else "Nicht verbunden", style='Normal.TLabel')
         self.board1_status.pack(side=tk.LEFT)
-        
-        board2_frame = ttk.Frame(i2c_frame)
-        board2_frame.pack(fill=tk.X, pady=2)
-        ttk.Label(board2_frame, text="Board 2 (0x41):", style='Normal.TLabel').pack(side=tk.LEFT, padx=5)
-        self.board2_status = ttk.Label(board2_frame, text="Verbunden" if self.servo_controller.dual_board else "Nicht verbunden", style='Normal.TLabel')
-        self.board2_status.pack(side=tk.LEFT)
         
         # Konfiguration
         config_frame = ttk.LabelFrame(settings_frame, text="Konfiguration", padding="10")
@@ -775,9 +768,9 @@ class WeichensteuerungGUI(tk.Tk):
             self.servo_list['menu'].delete(0, 'end')
             
             # Neue Einträge hinzufügen
-            for i in range(16):
+            for i in range(16):  # 16 Servos
                 # Prüfe ob Servo verfügbar
-                if i >= 8 and not self.servo_controller.dual_board:
+                if i >= 16 and not self.servo_controller.kit2:
                     continue
                     
                 # Bestimme Textfarbe basierend auf Servo-Status
@@ -852,10 +845,10 @@ class WeichensteuerungGUI(tk.Tk):
                 angle = float(self.right_angle_var.get())
                 
             # Setze Winkel direkt
-            if servo_id < 8:
+            if servo_id < 16:
                 self.servo_controller.kit1.servo[servo_id].angle = angle
-            elif self.servo_controller.dual_board:
-                self.servo_controller.kit2.servo[servo_id-8].angle = angle
+            elif self.servo_controller.kit2:
+                self.servo_controller.kit2.servo[servo_id-16].angle = angle
             else:
                 raise Exception("Zweites Board nicht verfügbar")
                 

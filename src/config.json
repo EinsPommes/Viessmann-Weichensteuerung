@@ -39,7 +39,7 @@
                 "gpio": 15,
                 "left_angle": 0,
                 "right_angle": 180,
-                "speed": 1.0,
+                "speed": 0.1,
                 "movement_limit": true,
                 "max_duty": 12.5,
                 "min_duty": 2.5

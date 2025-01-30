@@ -114,16 +114,14 @@ class WebServer:
         def get_servo(servo_id):
             """Liefert Status eines Servos"""
             try:
-                state = self.servo_controller.servo_states.get(str(servo_id), {})
-                return jsonify({
-                    'position': state.get('position', 'unknown'),
-                    'initialized': state.get('initialized', False),
-                    'error': state.get('error', False),
-                    'status': state.get('status', 'unknown')
-                })
+                # Prüfe ob Servo auf zweitem Board liegt und dieses verfügbar ist
+                if servo_id >= 16 and self.servo_controller.kit2 is None:
+                    return jsonify({'status': 'unavailable', 'message': 'Servo nicht verfügbar (kein zweites Board)'})
+                    
+                status = self.servo_controller.get_servo_status(servo_id)
+                return jsonify(status)
             except Exception as e:
-                logger.error(f"Fehler beim Abrufen von Servo {servo_id}: {e}")
-                return jsonify({'error': str(e)}), 500
+                return jsonify({'status': 'error', 'message': str(e)})
 
 def init_controller():
     """Initialisiert den ServoController"""
