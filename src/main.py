@@ -35,6 +35,18 @@ class WeichensteuerungGUI(tk.Tk):
             # Fenstertitel
             self.title("Car Motion System")
             
+            # Initialisiere ServoKit Controller
+            self.servo_controller = ServoKitController()
+            
+            # Fahre alle Servos nach links beim Start
+            self.logger.info("Fahre alle Servos in die linke Position...")
+            for servo_id in range(16):  # für alle möglichen Servos
+                try:
+                    self.servo_controller.move_left(servo_id)
+                    time.sleep(0.1)  # kleine Pause zwischen den Bewegungen
+                except Exception as e:
+                    self.logger.warning(f"Konnte Servo {servo_id} nicht nach links fahren: {str(e)}")
+            
             # Fenster mittig positionieren
             window_width = 800
             window_height = 600
@@ -50,15 +62,6 @@ class WeichensteuerungGUI(tk.Tk):
             self.right_angle_var = tk.StringVar(value="150.0")
             self.current_servo = 0
             
-            # Initialisiere ServoController
-            try:
-                self.servo_controller = ServoKitController()
-                self.logger.debug("ServoController erfolgreich initialisiert")
-            except Exception as e:
-                self.logger.error(f"Fehler bei der Initialisierung des ServoControllers: {e}")
-                messagebox.showerror("Fehler", f"ServoController konnte nicht initialisiert werden: {e}")
-                raise
-                
             # Initialisiere Dictionaries für LED Canvas und Position Labels
             self.led_canvas = {}
             self.position_labels = {}
