@@ -28,11 +28,6 @@ class ServoKitController:
             
             # Lade Konfiguration
             self.config = self.load_config()
-            servo_config = self.config.get('SERVO_CONFIG', {})
-            
-            # Hole PWM Konfiguration
-            self.MIN_PULSE = servo_config.get('MIN_PULSE', 500)
-            self.MAX_PULSE = servo_config.get('MAX_PULSE', 2500)
             
             # Erstelle I2C Bus
             self.i2c = busio.I2C(board.SCL, board.SDA)
@@ -43,9 +38,10 @@ class ServoKitController:
             # Setze die PWM-Frequenz auf 50Hz (Standard für Servos)
             self.kit1._pca.frequency = 50
             
-            # Konfiguriere die Servos mit den korrekten Pulswerten
-            for channel in range(16):
-                self.kit1.servo[channel].set_pulse_width_range(self.MIN_PULSE, self.MAX_PULSE)
+            # Deaktiviere Bewegung für alle Servos
+            for i in range(16):
+                self.kit1.servo[i].actuation_range = 0  # Verhindert Bewegung beim Start
+                self.kit1.servo[i].set_pulse_width_range(1500, 1500)  # Fixiere auf Mittelposition
             
             self.logger.info("ServoKit 1 (0x40) erfolgreich initialisiert")
             
@@ -53,12 +49,13 @@ class ServoKitController:
             try:
                 self.kit2 = ServoKit(channels=16, i2c=self.i2c, address=0x41)
                 self.dual_board = True
-                
-                # Konfiguriere auch die Servos auf dem zweiten Board
                 self.kit2._pca.frequency = 50
-                for channel in range(16):
-                    self.kit2.servo[channel].set_pulse_width_range(self.MIN_PULSE, self.MAX_PULSE)
-                    
+                
+                # Deaktiviere Bewegung für alle Servos auf Board 2
+                for i in range(16):
+                    self.kit2.servo[i].actuation_range = 0  # Verhindert Bewegung beim Start
+                    self.kit2.servo[i].set_pulse_width_range(1500, 1500)  # Fixiere auf Mittelposition
+                
                 self.logger.info("Zweites PCA9685 Board gefunden")
             except Exception as e:
                 self.kit2 = None
@@ -68,10 +65,7 @@ class ServoKitController:
             # Servo-Status initialisieren
             self.servo_states = {}
             
-            # Initialisiere Servos
-            self.initialize_servos()
-            
-            self.logger.info("Servo-Initialisierung abgeschlossen")
+            self.logger.info("Servo-Controller erfolgreich initialisiert")
             
         except Exception as e:
             self.logger.error(f"Fehler bei der Initialisierung: {e}")
