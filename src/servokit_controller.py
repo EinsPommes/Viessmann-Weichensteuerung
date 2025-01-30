@@ -32,16 +32,31 @@ class ServoKitController:
             # Erstelle I2C Bus
             self.i2c = busio.I2C(board.SCL, board.SDA)
             
+            # PCA9685 Register-Adressen
+            MODE1 = 0x00
+            PRESCALE = 0xFE
+            LED0_ON_L = 0x06
+            
             # Erstelle ServoKit für Board 1
             self.kit1 = ServoKit(channels=16, i2c=self.i2c, address=0x40)
+            
+            # Setze alle Kanäle auf 0 bevor wir die Frequenz ändern
+            for i in range(16):
+                reg_base = LED0_ON_L + (i * 4)
+                self.kit1._pca._write_byte(reg_base, 0)
+                self.kit1._pca._write_byte(reg_base + 1, 0)
+                self.kit1._pca._write_byte(reg_base + 2, 0)
+                self.kit1._pca._write_byte(reg_base + 3, 0)
             
             # Setze die PWM-Frequenz auf 50Hz (Standard für Servos)
             self.kit1._pca.frequency = 50
             
-            # Deaktiviere Bewegung für alle Servos
+            # Setze alle Servos auf Mittelposition (1.5ms Puls)
+            pulse_width = int(1.5 * 4096 / 20)  # 1.5ms bei 50Hz
             for i in range(16):
-                self.kit1.servo[i].actuation_range = 0  # Verhindert Bewegung beim Start
-                self.kit1.servo[i].set_pulse_width_range(1500, 1500)  # Fixiere auf Mittelposition
+                reg_base = LED0_ON_L + (i * 4)
+                self.kit1._pca._write_byte(reg_base + 2, pulse_width & 0xFF)
+                self.kit1._pca._write_byte(reg_base + 3, (pulse_width >> 8) & 0x0F)
             
             self.logger.info("ServoKit 1 (0x40) erfolgreich initialisiert")
             
@@ -49,12 +64,21 @@ class ServoKitController:
             try:
                 self.kit2 = ServoKit(channels=16, i2c=self.i2c, address=0x41)
                 self.dual_board = True
+                
+                # Das gleiche für Board 2
+                for i in range(16):
+                    reg_base = LED0_ON_L + (i * 4)
+                    self.kit2._pca._write_byte(reg_base, 0)
+                    self.kit2._pca._write_byte(reg_base + 1, 0)
+                    self.kit2._pca._write_byte(reg_base + 2, 0)
+                    self.kit2._pca._write_byte(reg_base + 3, 0)
+                
                 self.kit2._pca.frequency = 50
                 
-                # Deaktiviere Bewegung für alle Servos auf Board 2
                 for i in range(16):
-                    self.kit2.servo[i].actuation_range = 0  # Verhindert Bewegung beim Start
-                    self.kit2.servo[i].set_pulse_width_range(1500, 1500)  # Fixiere auf Mittelposition
+                    reg_base = LED0_ON_L + (i * 4)
+                    self.kit2._pca._write_byte(reg_base + 2, pulse_width & 0xFF)
+                    self.kit2._pca._write_byte(reg_base + 3, (pulse_width >> 8) & 0x0F)
                 
                 self.logger.info("Zweites PCA9685 Board gefunden")
             except Exception as e:
