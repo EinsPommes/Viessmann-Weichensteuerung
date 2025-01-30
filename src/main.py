@@ -38,14 +38,8 @@ class WeichensteuerungGUI(tk.Tk):
             # Initialisiere ServoKit Controller
             self.servo_controller = ServoKitController()
             
-            # Fahre alle Servos nach links beim Start
-            self.logger.info("Fahre alle Servos in die linke Position...")
-            for servo_id in range(16):  # für alle möglichen Servos
-                try:
-                    self.servo_controller.move_left(servo_id)
-                    time.sleep(0.1)  # kleine Pause zwischen den Bewegungen
-                except Exception as e:
-                    self.logger.warning(f"Konnte Servo {servo_id} nicht nach links fahren: {str(e)}")
+            # Servos werden jetzt in der ServoKit-Initialisierung konfiguriert
+            self.logger.info("Servo-Controller wurde initialisiert")
             
             # Fenster mittig positionieren
             window_width = 800
