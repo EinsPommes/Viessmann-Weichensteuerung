@@ -258,10 +258,6 @@ class ServoKitController:
     def set_angle(self, servo_num: int, angle: float, steps=10) -> None:
         """Setzt einen Servo auf einen bestimmten Winkel"""
         try:
-            # Validiere Winkel
-            if not (0 <= angle <= 180):
-                raise ValueError(f"Ungültiger Winkel: {angle}")
-                
             # Bestimme Board und Channel
             if servo_num < 16:
                 kit = self.kit1
@@ -274,8 +270,12 @@ class ServoKitController:
             
             # Hole Servo-Konfiguration
             servo_config = self.config.get('SERVO_CONFIG', {}).get('SERVOS', [])[servo_num]
-            min_duty = float(servo_config.get('min_duty', 2.5))
-            max_duty = float(servo_config.get('max_duty', 12.5))
+            left_angle = float(servo_config.get('left_angle', 0))
+            right_angle = float(servo_config.get('right_angle', 180))
+            
+            # Validiere Winkel
+            if not (left_angle <= angle <= right_angle):
+                raise ValueError(f"Winkel {angle} außerhalb des erlaubten Bereichs ({left_angle}° - {right_angle}°)")
             
             # Hole aktuellen Winkel
             current_angle = self.servo_states[str(servo_num)].get('current_angle')
@@ -284,19 +284,19 @@ class ServoKitController:
             
             # Berechne Schritte
             angle_diff = angle - current_angle
-            angle_step = angle_diff / steps
+            angle_step = angle_diff / steps if steps > 0 else angle_diff
             
             # Bewege schrittweise
             for step in range(steps):
                 current_angle += angle_step
-                # Berechne den duty cycle basierend auf den konfigurierten min/max Werten
-                duty = min_duty + (current_angle / 180.0) * (max_duty - min_duty)
-                kit.servo[channel].angle = current_angle
+                # Normalisiere den Winkel auf den Servo-Bereich
+                normalized_angle = ((current_angle - left_angle) / (right_angle - left_angle)) * 180
+                kit.servo[channel].angle = normalized_angle
                 time.sleep(0.02)  # 20ms Pause zwischen den Schritten
             
             # Stelle sicher, dass der endgültige Winkel exakt stimmt
-            duty = min_duty + (angle / 180.0) * (max_duty - min_duty)
-            kit.servo[channel].angle = angle
+            normalized_angle = ((angle - left_angle) / (right_angle - left_angle)) * 180
+            kit.servo[channel].angle = normalized_angle
             
             # Aktualisiere Status
             self.servo_states[str(servo_num)]['current_angle'] = angle
