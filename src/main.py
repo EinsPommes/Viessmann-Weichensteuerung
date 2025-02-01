@@ -9,11 +9,9 @@ from web_server import run_server
 
 class WeichensteuerungGUI(tk.Tk):
     def __init__(self):
-        """Initialisiert die GUI"""
         try:
             # Logger initialisieren
-            self.logger = logging.getLogger(__name__)
-            self.logger.setLevel(logging.DEBUG)
+            self.setup_logging()
             self.logger.debug("GUI Initialisierung gestartet")
             
             # Hauptfenster erstellen
@@ -89,10 +87,37 @@ class WeichensteuerungGUI(tk.Tk):
             self.logger.debug("GUI Initialisierung abgeschlossen")
             
         except Exception as e:
-            self.logger.error(f"Fehler bei der GUI Initialisierung: {e}")
-            messagebox.showerror("Fehler", f"GUI konnte nicht initialisiert werden: {e}")
+            if hasattr(self, 'logger'):
+                self.logger.error(f"Fehler bei der GUI Initialisierung: {e}")
+            else:
+                print(f"Logger nicht verfügbar. Fehler: {e}")
+            messagebox.showerror("Fehler", f"GUI Initialisierung fehlgeschlagen: {str(e)}")
             raise
             
+    def setup_logging(self):
+        """Initialisiert den Logger"""
+        try:
+            # Erstelle Logger
+            self.logger = logging.getLogger(__name__)
+            self.logger.setLevel(logging.DEBUG)
+            
+            # Erstelle Handler
+            console_handler = logging.StreamHandler()
+            console_handler.setLevel(logging.DEBUG)
+            
+            # Erstelle Formatter
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            console_handler.setFormatter(formatter)
+            
+            # Füge Handler zum Logger hinzu
+            self.logger.addHandler(console_handler)
+            
+            self.logger.debug("Logger wurde initialisiert")
+            
+        except Exception as e:
+            print(f"Fehler bei der Logger-Initialisierung: {e}")
+            raise
+
     def create_control_tab(self):
         """Erstellt den Control-Tab mit LED-Anzeigen und Buttons für jeden Servo"""
         self.logger.debug("Erstelle Control-Tab")
@@ -156,141 +181,7 @@ class WeichensteuerungGUI(tk.Tk):
             control_frame.grid_rowconfigure(i, weight=1)
             
         self.logger.debug(f"Control-Tab erstellt mit {len(self.led_canvas)} LED Canvas und {len(self.position_labels)} Position Labels")
-
-    def move_left(self, servo_id):
-        """Bewegt den Servo nach links"""
-        try:
-            self.logger.debug(f"Bewege Servo {servo_id+1} nach links")
-            
-            # Setze Status auf 'moving'
-            if servo_id in self.led_canvas:
-                canvas, led = self.led_canvas[servo_id]
-                canvas.itemconfig(led, fill='yellow')
-            
-            # Bewege den Servo
-            self.servo_controller.move_servo(servo_id, 'left')
-            
-            # Aktualisiere den Status
-            self.update_led_status(servo_id)
-            
-        except Exception as e:
-            self.logger.error(f"Fehler beim Bewegen von Servo {servo_id+1} nach links: {e}")
-            messagebox.showerror("Fehler", f"Servo {servo_id+1} konnte nicht nach links bewegt werden: {e}")
-            
-            # Setze Status auf 'error'
-            if servo_id in self.led_canvas:
-                canvas, led = self.led_canvas[servo_id]
-                canvas.itemconfig(led, fill='red')
-                
-    def move_right(self, servo_id):
-        """Bewegt den Servo nach rechts"""
-        try:
-            self.logger.debug(f"Bewege Servo {servo_id+1} nach rechts")
-            
-            # Setze Status auf 'moving'
-            if servo_id in self.led_canvas:
-                canvas, led = self.led_canvas[servo_id]
-                canvas.itemconfig(led, fill='yellow')
-            
-            # Bewege den Servo
-            self.servo_controller.move_servo(servo_id, 'right')
-            
-            # Aktualisiere den Status
-            self.update_led_status(servo_id)
-            
-        except Exception as e:
-            self.logger.error(f"Fehler beim Bewegen von Servo {servo_id+1} nach rechts: {e}")
-            messagebox.showerror("Fehler", f"Servo {servo_id+1} konnte nicht nach rechts bewegt werden: {e}")
-            
-            # Setze Status auf 'error'
-            if servo_id in self.led_canvas:
-                canvas, led = self.led_canvas[servo_id]
-                canvas.itemconfig(led, fill='red')
-                
-    def update_led_status(self, servo_id):
-        """Aktualisiert den LED-Status für einen einzelnen Servo"""
-        try:
-            state = self.servo_controller.servo_states.get(str(servo_id), {})
-            status = state.get('status', 'unknown')
-            position = state.get('position', None)
-            
-            self.logger.debug(f"Update LED Status für Servo {servo_id+1}: Status={status}, Position={position}")
-            
-            # Aktualisiere LED
-            if servo_id in self.led_canvas:
-                canvas, led = self.led_canvas[servo_id]
-                color = {
-                    'initialized': 'green',
-                    'moving': 'yellow',
-                    'error': 'red',
-                    'unknown': 'gray'
-                }.get(status, 'gray')
-                canvas.itemconfig(led, fill=color)
-                self.logger.debug(f"LED für Servo {servo_id+1} auf {color} gesetzt")
-            
-            # Aktualisiere Position Label
-            if servo_id in self.position_labels:
-                if status == 'error':
-                    text = "Error"
-                elif position == 'left':
-                    text = "Links"
-                elif position == 'right':
-                    text = "Rechts"
-                else:
-                    text = "---"
-                self.position_labels[servo_id].config(text=text)
-                self.logger.debug(f"Position Label für Servo {servo_id+1} auf {text} gesetzt")
-                
-        except Exception as e:
-            self.logger.error(f"Fehler beim Aktualisieren des LED-Status für Servo {servo_id+1}: {e}")
-            
-    def update_servo_status(self):
-        """Aktualisiert die Status-LEDs und Position Labels aller Servos"""
-        try:
-            self.logger.debug("Starte Status-Update für alle Servos")
-            for i in range(16):
-                self.update_led_status(i)
-        except Exception as e:
-            self.logger.error(f"Fehler beim Aktualisieren der Status-LEDs: {e}")
         
-        # Plane nächste Aktualisierung in 1 Sekunde
-        self.after(1000, self.update_servo_status)
-        
-    def move_servo(self, servo_id, direction):
-        """Bewegt einen Servo in die angegebene Richtung"""
-        try:
-            self.logger.debug(f"Bewege Servo {servo_id+1} nach {direction}")
-            
-            # Setze Status auf 'moving'
-            if servo_id in self.led_canvas:
-                canvas, led = self.led_canvas[servo_id]
-                canvas.itemconfig(led, fill='yellow')
-                self.logger.debug(f"LED für Servo {servo_id+1} auf gelb gesetzt (moving)")
-            
-            # Bewege den Servo
-            if direction == "left":
-                self.move_left(servo_id)
-            else:
-                self.move_right(servo_id)
-                
-            # Aktualisiere den Status
-            self.update_led_status(servo_id)
-            self.logger.debug(f"Servo {servo_id+1} erfolgreich bewegt")
-            
-        except Exception as e:
-            self.logger.error(f"Fehler beim Bewegen von Servo {servo_id+1}: {e}")
-            messagebox.showerror("Fehler", f"Servo {servo_id+1} konnte nicht bewegt werden: {e}")
-            
-            # Setze Status auf 'error'
-            if servo_id in self.led_canvas:
-                canvas, led = self.led_canvas[servo_id]
-                canvas.itemconfig(led, fill='red')
-                self.logger.debug(f"LED für Servo {servo_id+1} auf rot gesetzt (error)")
-                
-            if servo_id in self.position_labels:
-                self.position_labels[servo_id].config(text="Error")
-                self.logger.debug(f"Position Label für Servo {servo_id+1} auf 'Error' gesetzt")
-                
     def create_calibration_tab(self):
         """Erstellt den Kalibrierungs-Tab"""
         self.logger.debug("Erstelle Kalibrierungs-Tab")
@@ -698,23 +589,26 @@ class WeichensteuerungGUI(tk.Tk):
                 position = state.get('position')
                 
                 # Aktualisiere Positions-Label
-                if position in ['left', 'right']:
-                    frame_data['pos_label'].config(text=position.capitalize())
+                if position == "left":
+                    frame_data['pos_label'].config(text="Links")
+                elif position == "right":
+                    frame_data['pos_label'].config(text="Rechts")
                 else:
-                    frame_data['pos_label'].config(text='?')
+                    frame_data['pos_label'].config(text="?")
                 
                 # Aktualisiere LED-Farbe
                 if state['error']:
                     frame_data['canvas'].itemconfig(frame_data['led'], fill='red')
                 elif time.time() - state['last_move'] < 0.5:  # Bewegung in den letzten 0.5 Sekunden
                     frame_data['canvas'].itemconfig(frame_data['led'], fill='yellow')
-                elif position in ['left', 'right']:  # Position bekannt
+                elif position in ["left", "right"]:  # Position bekannt
                     frame_data['canvas'].itemconfig(frame_data['led'], fill='green')
                 else:
                     frame_data['canvas'].itemconfig(frame_data['led'], fill='gray')
             
         except Exception as e:
             self.logger.error(f"Fehler beim Aktualisieren des Status: {e}")
+            messagebox.showerror("Fehler", str(e))
             
         # Plane nächste Aktualisierung
         self.after(500, self.update_status)
@@ -832,7 +726,7 @@ class WeichensteuerungGUI(tk.Tk):
         """Testet einen Servo mit den aktuellen Einstellungen"""
         try:
             # Hole Servo-ID
-            servo_str = self.servo_var.get()
+            servo_str = self.cal_servo_var.get()
             servo_id = int(servo_str.split()[1]) - 1  # "Servo 1" -> 0
             
             # Hole Winkel
@@ -841,24 +735,21 @@ class WeichensteuerungGUI(tk.Tk):
             else:
                 angle = float(self.right_angle_var.get())
                 
-            # Setze Winkel direkt
-            if servo_id < 16:
-                self.servo_controller.kit1.servo[servo_id].angle = angle
-            elif self.servo_controller.kit2:
-                self.servo_controller.kit2.servo[servo_id-16].angle = angle
-            else:
-                raise Exception("Zweites Board nicht verfügbar")
-                
-            # Aktualisiere Status
-            self.servo_controller.servo_states[servo_id].update({
-                'position': direction,
-                'current_angle': angle,
-                'last_move': time.time(),
-                'error': False,
-                'initialized': True
-            })
+            self.logger.info(f"Test: Bewege Servo {servo_id+1} nach {direction} (Winkel: {angle}°)")
             
-            self.logger.info(f"Test: Servo {servo_id+1} auf {angle}° ({direction}) gesetzt")
+            # Aktualisiere temporär die Konfiguration
+            config_data = {
+                'left_angle': float(self.left_angle_var.get()),
+                'right_angle': float(self.right_angle_var.get())
+            }
+            self.servo_controller.update_servo_config(servo_id, config_data)
+            
+            # Bewege den Servo
+            result = self.servo_controller.move_servo(servo_id, direction)
+            if result.get('status') == 'success':
+                self.logger.info(f"Servo {servo_id+1} erfolgreich bewegt")
+            else:
+                raise Exception("Bewegung fehlgeschlagen")
             
         except Exception as e:
             self.logger.error(f"Fehler beim Testen: {e}")
@@ -1061,31 +952,30 @@ class WeichensteuerungGUI(tk.Tk):
     def save_calibration(self):
         """Speichert die Kalibrierungseinstellungen"""
         try:
-            # Hole aktuelle Werte
-            left = float(self.left_angle_var.get())
-            right = float(self.right_angle_var.get())
+            # Hole aktuelle Servo-ID
+            servo_str = self.cal_servo_var.get()
+            servo_id = int(servo_str.split()[1]) - 1  # "Servo 1" -> 0
             
-            # Validiere Werte
-            if not (0 <= left <= 90):
-                raise ValueError(f"Ungültiger linker Winkel: {left}")
-            if not (90 <= right <= 180):
-                raise ValueError(f"Ungültiger rechter Winkel: {right}")
-                
-            # Speichere in Konfiguration
-            self.servo_controller.config[str(self.current_servo)] = {
-                'left_angle': left,
-                'right_angle': right,
-                'speed': 0.5  # Standard-Geschwindigkeit
+            # Hole die Winkel
+            left_angle = float(self.left_angle_var.get())
+            right_angle = float(self.right_angle_var.get())
+            
+            self.logger.info(f"Speichere Kalibrierung für Servo {servo_id+1}: Links={left_angle}°, Rechts={right_angle}°")
+            
+            # Aktualisiere die Servo-Konfiguration
+            config_data = {
+                'left_angle': left_angle,
+                'right_angle': right_angle
             }
             
-            # Speichere Konfiguration
-            self.servo_controller.save_config()
-            messagebox.showinfo("Erfolg", "Kalibrierung erfolgreich gespeichert")
-            self.cal_window.destroy()
-                
+            # Speichere die Konfiguration
+            self.servo_controller.update_servo_config(servo_id, config_data)
+            
+            messagebox.showinfo("Erfolg", f"Kalibrierung für Servo {servo_id+1} gespeichert")
+            
         except Exception as e:
             self.logger.error(f"Fehler beim Speichern der Kalibrierung: {e}")
-            messagebox.showerror("Fehler", str(e))
+            messagebox.showerror("Fehler", f"Kalibrierung konnte nicht gespeichert werden: {str(e)}")
 
     def get_ip_address(self):
         """Ermittelt die IP-Adresse"""
@@ -1104,6 +994,91 @@ class WeichensteuerungGUI(tk.Tk):
         self.ip_label.config(text=f"IP-Adresse: {ip}:5000")
         self.after(5000, self.update_ip)  # Erneut in 5 Sekunden
 
+    def move_left(self, servo_id):
+        """Bewegt den Servo nach links"""
+        try:
+            self.logger.debug(f"Bewege Servo {servo_id+1} nach links")
+            
+            # Setze Status auf 'moving'
+            if servo_id in self.led_canvas:
+                canvas, led = self.led_canvas[servo_id]
+                canvas.itemconfig(led, fill='yellow')
+            
+            # Bewege Servo
+            self.servo_controller.move_servo(servo_id, 'left')
+            
+            # Aktualisiere Status
+            self.update_led_status(servo_id)
+            
+        except Exception as e:
+            self.logger.error(f"Fehler beim Bewegen von Servo {servo_id+1} nach links: {e}")
+            messagebox.showerror("Fehler", f"Servo {servo_id+1} konnte nicht nach links bewegt werden: {e}")
+            
+            # Setze Status auf 'error'
+            if servo_id in self.led_canvas:
+                canvas, led = self.led_canvas[servo_id]
+                canvas.itemconfig(led, fill='red')
+    
+    def move_right(self, servo_id):
+        """Bewegt den Servo nach rechts"""
+        try:
+            self.logger.debug(f"Bewege Servo {servo_id+1} nach rechts")
+            
+            # Setze Status auf 'moving'
+            if servo_id in self.led_canvas:
+                canvas, led = self.led_canvas[servo_id]
+                canvas.itemconfig(led, fill='yellow')
+            
+            # Bewege Servo
+            self.servo_controller.move_servo(servo_id, 'right')
+            
+            # Aktualisiere Status
+            self.update_led_status(servo_id)
+            
+        except Exception as e:
+            self.logger.error(f"Fehler beim Bewegen von Servo {servo_id+1} nach rechts: {e}")
+            messagebox.showerror("Fehler", f"Servo {servo_id+1} konnte nicht nach rechts bewegt werden: {e}")
+            
+            # Setze Status auf 'error'
+            if servo_id in self.led_canvas:
+                canvas, led = self.led_canvas[servo_id]
+                canvas.itemconfig(led, fill='red')
+    
+    def update_led_status(self, servo_id):
+        """Aktualisiert den LED-Status für einen einzelnen Servo"""
+        try:
+            # Hole Servo-Status
+            state = self.servo_controller.get_servo_status(servo_id)
+            
+            # Aktualisiere LED
+            if servo_id in self.led_canvas:
+                canvas, led = self.led_canvas[servo_id]
+                
+                if state.get('error'):
+                    canvas.itemconfig(led, fill='red')
+                elif state.get('status') == 'moving':
+                    canvas.itemconfig(led, fill='yellow')
+                elif state.get('position') in ['left', 'right']:
+                    canvas.itemconfig(led, fill='green')
+                else:
+                    canvas.itemconfig(led, fill='gray')
+            
+            # Aktualisiere Position Label
+            if servo_id in self.position_labels:
+                position = state.get('position')
+                if position == 'left':
+                    self.position_labels[servo_id].config(text='Links')
+                elif position == 'right':
+                    self.position_labels[servo_id].config(text='Rechts')
+                else:
+                    self.position_labels[servo_id].config(text='---')
+                    
+        except Exception as e:
+            self.logger.error(f"Fehler beim Aktualisieren des LED-Status für Servo {servo_id+1}: {e}")
+            if servo_id in self.led_canvas:
+                canvas, led = self.led_canvas[servo_id]
+                canvas.itemconfig(led, fill='red')
+                
 def main():
     try:
         root = WeichensteuerungGUI()
