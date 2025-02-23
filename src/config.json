@@ -3,7 +3,7 @@
         "SERVOS": [
             {
                 "id": 0,
-                "gpio": 15,
+                "gpio": 0,
                 "left_angle": 45,
                 "right_angle": 135,
                 "min_pulse": 500,
@@ -11,7 +11,7 @@
             },
             {
                 "id": 1,
-                "gpio": 18,
+                "gpio": 1,
                 "left_angle": 45,
                 "right_angle": 135,
                 "min_pulse": 500,
@@ -19,7 +19,7 @@
             },
             {
                 "id": 2,
-                "gpio": 27,
+                "gpio": 2,
                 "left_angle": 45,
                 "right_angle": 135,
                 "min_pulse": 500,
@@ -27,7 +27,7 @@
             },
             {
                 "id": 3,
-                "gpio": 22,
+                "gpio": 3,
                 "left_angle": 45,
                 "right_angle": 135,
                 "min_pulse": 500,
@@ -35,30 +35,6 @@
             },
             {
                 "id": 4,
-                "gpio": 23,
-                "left_angle": 45,
-                "right_angle": 135,
-                "min_pulse": 500,
-                "max_pulse": 2500
-            },
-            {
-                "id": 5,
-                "gpio": 24,
-                "left_angle": 45,
-                "right_angle": 135,
-                "min_pulse": 500,
-                "max_pulse": 2500
-            },
-            {
-                "id": 6,
-                "gpio": 25,
-                "left_angle": 45,
-                "right_angle": 135,
-                "min_pulse": 500,
-                "max_pulse": 2500
-            },
-            {
-                "id": 7,
                 "gpio": 4,
                 "left_angle": 45,
                 "right_angle": 135,
@@ -66,7 +42,7 @@
                 "max_pulse": 2500
             },
             {
-                "id": 8,
+                "id": 5,
                 "gpio": 5,
                 "left_angle": 45,
                 "right_angle": 135,
@@ -74,7 +50,7 @@
                 "max_pulse": 2500
             },
             {
-                "id": 9,
+                "id": 6,
                 "gpio": 6,
                 "left_angle": 45,
                 "right_angle": 135,
@@ -82,8 +58,32 @@
                 "max_pulse": 2500
             },
             {
+                "id": 7,
+                "gpio": 7,
+                "left_angle": 45,
+                "right_angle": 135,
+                "min_pulse": 500,
+                "max_pulse": 2500
+            },
+            {
+                "id": 8,
+                "gpio": 8,
+                "left_angle": 45,
+                "right_angle": 135,
+                "min_pulse": 500,
+                "max_pulse": 2500
+            },
+            {
+                "id": 9,
+                "gpio": 9,
+                "left_angle": 45,
+                "right_angle": 135,
+                "min_pulse": 500,
+                "max_pulse": 2500
+            },
+            {
                 "id": 10,
-                "gpio": 12,
+                "gpio": 10,
                 "left_angle": 45,
                 "right_angle": 135,
                 "min_pulse": 500,
@@ -91,7 +91,7 @@
             },
             {
                 "id": 11,
-                "gpio": 13,
+                "gpio": 11,
                 "left_angle": 45,
                 "right_angle": 135,
                 "min_pulse": 500,
@@ -99,7 +99,7 @@
             },
             {
                 "id": 12,
-                "gpio": 16,
+                "gpio": 12,
                 "left_angle": 45,
                 "right_angle": 135,
                 "min_pulse": 500,
@@ -107,7 +107,7 @@
             },
             {
                 "id": 13,
-                "gpio": 19,
+                "gpio": 13,
                 "left_angle": 45,
                 "right_angle": 135,
                 "min_pulse": 500,
@@ -115,7 +115,7 @@
             },
             {
                 "id": 14,
-                "gpio": 20,
+                "gpio": 14,
                 "left_angle": 45,
                 "right_angle": 135,
                 "min_pulse": 500,
@@ -123,7 +123,7 @@
             },
             {
                 "id": 15,
-                "gpio": 21,
+                "gpio": 15,
                 "left_angle": 45,
                 "right_angle": 135,
                 "min_pulse": 500,

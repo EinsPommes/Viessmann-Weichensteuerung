@@ -89,43 +89,55 @@ class ServoKitController:
                 servo_data = {
                     'id': servo_id,
                     'gpio': servo_id,
-                    'left_angle': 30.0,
-                    'right_angle': 150.0
+                    'left_angle': 45.0,
+                    'right_angle': 135.0,
+                    'min_pulse': 500,
+                    'max_pulse': 2500
                 }
             
             # Setze Zielwinkel basierend auf Richtung
             target_angle = servo_data['left_angle'] if direction == 'left' else servo_data['right_angle']
             
-            # Aktualisiere Status auf 'moving'
-            self.servo_states[str(servo_id)].update({
-                'status': 'moving',
-                'last_move': time.time(),
-                'error': False
-            })
+            # Setze Pulslängen
+            min_pulse = servo_data.get('min_pulse', 500)
+            max_pulse = servo_data.get('max_pulse', 2500)
+            self.kit1.servo[servo_id].set_pulse_width_range(min_pulse, max_pulse)
             
-            # Bewege Servo zum Zielwinkel
-            self.set_angle(servo_id, target_angle)
+            # Bewege Servo
+            self.logger.info(f"Bewege Servo {servo_id} nach {direction} (Winkel: {target_angle}°)")
+            self.kit1.servo[servo_id].angle = target_angle
             
-            # Aktualisiere Status nach der Bewegung
+            # Aktualisiere Status
             self.servo_states[str(servo_id)].update({
                 'position': direction,
                 'current_angle': target_angle,
-                'status': 'initialized',
                 'last_move': time.time(),
-                'error': False
+                'error': False,
+                'status': 'ok'
             })
             
-            self.logger.info(f"Servo {servo_id} erfolgreich nach {direction} bewegt")
+            return {
+                'status': 'success',
+                'position': direction,
+                'angle': target_angle
+            }
             
         except Exception as e:
-            self.logger.error(f"Fehler beim Bewegen von Servo {servo_id}: {str(e)}")
-            # Setze Fehlerstatus
-            self.servo_states[str(servo_id)].update({
-                'error': True,
+            error_msg = f"Fehler beim Bewegen von Servo {servo_id}: {str(e)}"
+            self.logger.error(error_msg)
+            
+            # Aktualisiere Fehlerstatus
+            if str(servo_id) in self.servo_states:
+                self.servo_states[str(servo_id)].update({
+                    'error': True,
+                    'status': 'error',
+                    'message': str(e)
+                })
+            
+            return {
                 'status': 'error',
-                'message': str(e)
-            })
-            raise
+                'error': str(e)
+            }
             
     def load_config(self):
         """Lädt die Konfiguration aus der Datei"""
