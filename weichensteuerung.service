@@ -7,7 +7,7 @@ Type=simple
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=/home/mika/.Xauthority
 User=mika
-ExecStart=/home/mika/Viessmann-Weichensteuerung/start_weichensteuerung.sh
+ExecStart=/home/mika/Desktop/Viessmann-Weichensteuerung/start_weichensteuerung.sh
 Restart=always
 RestartSec=10
 

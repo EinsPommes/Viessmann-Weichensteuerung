@@ -1,18 +1,18 @@
 #!/bin/bash
 
 # Prüfe Berechtigungen
-if [ ! -w /home/mika/Viessmann-Weichensteuerung ]; then
+if [ ! -w "/home/mika/Desktop/Viessmann-Weichensteuerung" ]; then
     echo "Fehler: Keine Schreibrechte im Projektverzeichnis"
     exit 1
 fi
 
 # Aktiviere Python-Umgebung falls vorhanden
-if [ -f /home/mika/Viessmann-Weichensteuerung/venv/bin/activate ]; then
-    source /home/mika/Viessmann-Weichensteuerung/venv/bin/activate
+if [ -f "/home/mika/Desktop/Viessmann-Weichensteuerung/venv/bin/activate" ]; then
+    source "/home/mika/Desktop/Viessmann-Weichensteuerung/venv/bin/activate"
 fi
 
 # Wechsle in das Projektverzeichnis
-cd /home/mika/Viessmann-Weichensteuerung/src || exit 1
+cd "/home/mika/Desktop/Viessmann-Weichensteuerung/src" || exit 1
 
 # Prüfe ob Python-Abhängigkeiten installiert sind
 if ! python3 -c "import RPi.GPIO" 2>/dev/null; then
