@@ -492,13 +492,13 @@ class WeichensteuerungGUI(tk.Tk):
         ttk.Button(test_frame, text="Links", command=lambda: self.test_servo('left')).pack(side='left', padx=5, pady=5)
         ttk.Button(test_frame, text="Rechts", command=lambda: self.test_servo('right')).pack(side='left', padx=5, pady=5)
         
-        # Energiesparfunktion
-        power_save_frame = ttk.LabelFrame(scrollable_frame, text="Energiesparfunktion")
-        power_save_frame.pack(fill='x', pady=10, padx=5)
-        
-        # Aktivieren/Deaktivieren der Energiesparfunktion
+        # Überlastungssicherung
+        power_save_frame = ttk.LabelFrame(scrollable_frame, text="Überlastungssicherung")
+        power_save_frame.pack(pady=10, padx=10, fill="x")
+
+        # Aktivieren/Deaktivieren der Überlastungssicherung
         self.power_save_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(power_save_frame, text="Energiesparfunktion aktivieren", 
+        ttk.Checkbutton(power_save_frame, text="Überlastungssicherung aktivieren", 
                         variable=self.power_save_var, 
                         command=self.toggle_power_save).pack(anchor='w', padx=5, pady=5)
         
@@ -514,10 +514,10 @@ class WeichensteuerungGUI(tk.Tk):
         ttk.Button(timeout_frame, text="Übernehmen", 
                   command=self.set_power_save_timeout).pack(side='left', padx=5)
         
-        # Info-Text zur Energiesparfunktion
+        # Info-Text zur Überlastungssicherung
         ttk.Label(power_save_frame, 
-                 text="Die Energiesparfunktion schaltet Servos nach dem angegebenen Timeout automatisch stromlos.\n"
-                      "Dies spart Energie und verlängert die Lebensdauer der Servos.",
+                 text="Die Überlastungssicherung schaltet Servos nach dem angegebenen Timeout automatisch stromlos.\n"
+                      "Dies schützt die Servos vor Überlastung und verlängert ihre Lebensdauer.",
                  wraplength=400).pack(anchor='w', padx=5, pady=5)
         
         # System-Einstellungen
@@ -1090,7 +1090,7 @@ class WeichensteuerungGUI(tk.Tk):
                 elif time.time() - state['last_move'] < 0.5:  # Bewegung in den letzten 0.5 Sekunden
                     canvas.itemconfig(led, fill='yellow')
                 elif state.get('status') == 'power_save':
-                    # Blau für Energiesparmodus
+                    # Blau für Überlastungssicherung
                     canvas.itemconfig(led, fill='blue')
                 elif state.get('position') in ['left', 'right']:  # Position bekannt
                     canvas.itemconfig(led, fill='green')
@@ -1114,19 +1114,19 @@ class WeichensteuerungGUI(tk.Tk):
                 canvas.itemconfig(led, fill='red')
                 
     def toggle_power_save(self):
-        """Aktiviert oder deaktiviert die Energiesparfunktion"""
+        """Aktiviert oder deaktiviert die Überlastungssicherung"""
         try:
             enabled = self.power_save_var.get()
             self.servo_controller.enable_power_save(enabled)
-            self.logger.info(f"Energiesparfunktion {'aktiviert' if enabled else 'deaktiviert'}")
-            messagebox.showinfo("Energiesparfunktion", 
-                               f"Energiesparfunktion wurde {'aktiviert' if enabled else 'deaktiviert'}.")
+            self.logger.info(f"Überlastungssicherung {'aktiviert' if enabled else 'deaktiviert'}")
+            messagebox.showinfo("Überlastungssicherung", 
+                               f"Überlastungssicherung wurde {'aktiviert' if enabled else 'deaktiviert'}.")
         except Exception as e:
-            self.logger.error(f"Fehler beim Ändern der Energiesparfunktion: {e}")
-            messagebox.showerror("Fehler", f"Energiesparfunktion konnte nicht geändert werden: {e}")
-    
+            self.logger.error(f"Fehler beim Ändern der Überlastungssicherung: {e}")
+            messagebox.showerror("Fehler", f"Überlastungssicherung konnte nicht geändert werden: {e}")
+
     def set_power_save_timeout(self):
-        """Setzt den Timeout für die Energiesparfunktion"""
+        """Setzt den Timeout für die Überlastungssicherung"""
         try:
             timeout = float(self.timeout_var.get())
             if timeout < 0.5:
@@ -1135,8 +1135,8 @@ class WeichensteuerungGUI(tk.Tk):
                 timeout = 0.5
             
             self.servo_controller.set_power_save_timeout(timeout)
-            self.logger.info(f"Energiespar-Timeout auf {timeout} Sekunden gesetzt")
-            messagebox.showinfo("Timeout", f"Energiespar-Timeout wurde auf {timeout} Sekunden gesetzt.")
+            self.logger.info(f"Überlastungssicherung-Timeout auf {timeout} Sekunden gesetzt")
+            messagebox.showinfo("Timeout", f"Überlastungssicherung-Timeout wurde auf {timeout} Sekunden gesetzt.")
         except ValueError:
             messagebox.showerror("Fehler", "Bitte geben Sie eine gültige Zahl ein.")
             self.timeout_var.set("5.0")

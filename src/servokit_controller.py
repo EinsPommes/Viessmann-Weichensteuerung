@@ -37,10 +37,10 @@ class ServoKitController:
                     'error': False,
                     'initialized': True,
                     'status': 'initialized',
-                    'power_off_timer': None  # Timer für die Energiesparfunktion
+                    'power_off_timer': None  # Timer für die Überlastungssicherung
                 }
             
-            # Energiesparfunktion aktivieren
+            # Überlastungssicherung aktivieren
             self.power_save_enabled = True
             self.power_save_timeout = 5.0  # 5 Sekunden Timeout
                 
@@ -131,7 +131,7 @@ class ServoKitController:
                 'status': 'ok'
             })
             
-            # Starte Timer für Energiesparfunktion
+            # Starte Timer für Überlastungssicherung
             self._schedule_power_off(servo_id)
             
             return True
@@ -545,7 +545,7 @@ class ServoKitController:
             if self.kit1 is None:
                 return
                 
-            self.logger.info(f"Schalte Servo {servo_id} stromlos (Energiesparfunktion)")
+            self.logger.info(f"Schalte Servo {servo_id} stromlos (Überlastungssicherung)")
             
             # Speichere aktuelle Position und Winkel
             current_position = self.servo_states[str(servo_id)].get('position')
@@ -564,14 +564,14 @@ class ServoKitController:
             self.logger.error(f"Fehler beim Stromlos-Schalten von Servo {servo_id}: {str(e)}")
     
     def set_power_save_timeout(self, timeout_seconds):
-        """Setzt den Timeout für die Energiesparfunktion"""
+        """Setzt den Timeout für die Überlastungssicherung"""
         self.power_save_timeout = float(timeout_seconds)
-        self.logger.info(f"Energiespar-Timeout auf {self.power_save_timeout} Sekunden gesetzt")
+        self.logger.info(f"Überlastungssicherung-Timeout auf {self.power_save_timeout} Sekunden gesetzt")
     
     def enable_power_save(self, enabled=True):
-        """Aktiviert oder deaktiviert die Energiesparfunktion"""
+        """Aktiviert oder deaktiviert die Überlastungssicherung"""
         self.power_save_enabled = enabled
-        self.logger.info(f"Energiesparfunktion {'aktiviert' if enabled else 'deaktiviert'}")
+        self.logger.info(f"Überlastungssicherung {'aktiviert' if enabled else 'deaktiviert'}")
         
         # Wenn deaktiviert, alle Timer abbrechen
         if not enabled:
