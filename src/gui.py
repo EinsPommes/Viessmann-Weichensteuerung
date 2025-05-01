@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 import time
 from track_layout import TrackLayout
+import tkinter.messagebox as messagebox
 
 class GUI:
     def __init__(self, root, servo_controller, automation_controller):
@@ -28,12 +29,60 @@ class GUI:
         self.style.configure('Subheader.TLabel', font=('Segoe UI', 14), background='#f0f0f0')
         self.style.configure('Card.TLabel', background='white')
         
+        # Notfall-Button Style
+        self.style.configure('Emergency.TButton',
+                           padding=15,
+                           font=('Segoe UI', 16, 'bold'),
+                           background='#e74c3c',
+                           foreground='white')
+        
         # Hauptcontainer
         main_container = ttk.Frame(self.root, style='TFrame')
         main_container.pack(expand=True, fill='both', padx=20, pady=10)
         
-        # Linke Spalte
-        left_frame = ttk.Frame(main_container, style='TFrame')
+        # Notebook (Tab-System) erstellen
+        self.notebook = ttk.Notebook(main_container)
+        self.notebook.pack(expand=True, fill='both')
+        
+        # Haupt-Tab für Weichensteuerung
+        main_tab = ttk.Frame(self.notebook, style='TFrame')
+        self.notebook.add(main_tab, text='Weichensteuerung')
+        
+        # Notfall-Tab
+        emergency_tab = ttk.Frame(self.notebook, style='TFrame')
+        self.notebook.add(emergency_tab, text='⚠ NOTFALL')
+        
+        # Test-Button im Notfall-Tab
+        test_button = tk.Button(
+            emergency_tab,
+            text="Test Button",
+            bg='#3498db',
+            fg='white',
+            font=('Segoe UI', 16, 'bold'),
+            relief='raised',
+            padx=20,
+            pady=10
+        )
+        test_button.pack(pady=10)
+        
+        # Notfall-Button im Notfall-Tab
+        self.emergency_button = tk.Button(
+            emergency_tab,
+            text="⚠ NOTFALL: Alle Servos stromlos ⚠",
+            command=self.emergency_stop,
+            bg='#e74c3c',
+            fg='white',
+            font=('Segoe UI', 32, 'bold'),
+            relief='raised',
+            padx=50,
+            pady=30,
+            cursor='hand2',
+            width=40
+        )
+        self.emergency_button.pack(expand=True, fill='both', padx=20, pady=20)
+        
+        # Linke Spalte (jetzt im main_tab)
+        left_frame = ttk.Frame(main_tab, style='TFrame')
         left_frame.pack(side=tk.LEFT, fill='both', expand=True, padx=(0, 10))
         
         # Titel mit modernem Design
@@ -79,6 +128,7 @@ class GUI:
         legend_frame = ttk.Frame(left_frame, style='TFrame')
         legend_frame.pack(fill='x', pady=(0, 20))
         
+        # Status-Legende Icons
         ttk.Label(legend_frame, text="✓ Position korrekt",
                  foreground='#2ecc71', style='TLabel').pack(side=tk.LEFT, padx=(0, 15))
         ttk.Label(legend_frame, text="⚠ Position fehlerhaft",
@@ -103,7 +153,7 @@ class GUI:
             switch_frame = ttk.Frame(switches_frame, style='Card.TFrame')
             switch_frame.grid(row=row, column=col, padx=5, pady=5, sticky='nsew')
             
-            # Weichennummer und Status
+            # Weichennummer und Status 
             header_frame = ttk.Frame(switch_frame, style='Card.TFrame')
             header_frame.pack(fill='x', padx=10, pady=5)
             
@@ -143,7 +193,7 @@ class GUI:
             })
         
         # Rechte Spalte - Streckenlayout
-        right_frame = ttk.LabelFrame(main_container, text="Streckenübersicht",
+        right_frame = ttk.LabelFrame(main_tab, text="Streckenübersicht",
                                    style='Card.TFrame')
         right_frame.pack(side=tk.LEFT, fill='both', expand=True, padx=(10, 0))
         
@@ -237,3 +287,25 @@ class GUI:
             switch['left_btn'].config(state=tk.NORMAL)
             switch['right_btn'].config(state=tk.NORMAL)
             switch['test_btn'].config(state=tk.NORMAL)
+
+    def emergency_stop(self):
+        """Notfall-Abschaltung aller Servos"""
+        try:
+            if self.servo_controller.emergency_stop():
+                # Aktualisiere GUI-Status
+                for switch in self.switches:
+                    # Aktualisiere Status-Label
+                    switch['status_var'].set("Stromlos")
+                    switch['status_label'].config(foreground='#e74c3c')
+                    # Deaktiviere Steuerungsbuttons
+                    switch['left_btn'].config(state=tk.DISABLED)
+                    switch['right_btn'].config(state=tk.DISABLED)
+                    switch['test_btn'].config(state=tk.DISABLED)
+                # Aktualisiere den Notfall-Button
+                self.emergency_button.config(state=tk.DISABLED)
+                # Aktiviere den Button nach 2 Sekunden wieder
+                self.root.after(2000, lambda: self.emergency_button.config(state=tk.NORMAL))
+            else:
+                messagebox.showerror("Fehler", "Notfall-Abschaltung fehlgeschlagen!")
+        except Exception as e:
+            messagebox.showerror("Fehler", f"Fehler bei der Notfall-Abschaltung: {str(e)}")

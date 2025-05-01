@@ -5,6 +5,7 @@ import logging
 from adafruit_servokit import ServoKit
 import board
 import busio
+import threading
 
 class ServoKitController:
     """Klasse zur Steuerung der Servos über den ServoKit"""
@@ -35,8 +36,13 @@ class ServoKitController:
                     'last_move': time.time(),
                     'error': False,
                     'initialized': True,
-                    'status': 'initialized'
+                    'status': 'initialized',
+                    'power_off_timer': None  # Timer für die Energiesparfunktion
                 }
+            
+            # Energiesparfunktion aktivieren
+            self.power_save_enabled = True
+            self.power_save_timeout = 5.0  # 5 Sekunden Timeout
                 
             self.logger.info("ServoKit Controller erfolgreich initialisiert")
             
@@ -105,7 +111,16 @@ class ServoKitController:
             
             # Bewege Servo
             self.logger.info(f"Bewege Servo {servo_id} nach {direction} (Winkel: {target_angle}°)")
-            self.kit1.servo[servo_id].angle = target_angle
+            
+            # Aktuelle Position und Winkel
+            current_angle = self.servo_states[str(servo_id)].get('current_angle')
+            
+            # Wenn aktueller Winkel bekannt, bewege langsam zum Zielwinkel
+            if current_angle is not None:
+                self.set_angle(servo_id, target_angle)
+            else:
+                # Sonst direkt setzen
+                self.kit1.servo[servo_id].angle = target_angle
             
             # Aktualisiere Status
             self.servo_states[str(servo_id)].update({
@@ -116,28 +131,19 @@ class ServoKitController:
                 'status': 'ok'
             })
             
-            return {
-                'status': 'success',
-                'position': direction,
-                'angle': target_angle
-            }
+            # Starte Timer für Energiesparfunktion
+            self._schedule_power_off(servo_id)
+            
+            return True
             
         except Exception as e:
-            error_msg = f"Fehler beim Bewegen von Servo {servo_id}: {str(e)}"
-            self.logger.error(error_msg)
-            
-            # Aktualisiere Fehlerstatus
-            if str(servo_id) in self.servo_states:
-                self.servo_states[str(servo_id)].update({
-                    'error': True,
-                    'status': 'error',
-                    'message': str(e)
-                })
-            
-            return {
+            self.logger.error(f"Fehler beim Bewegen von Servo {servo_id}: {str(e)}")
+            self.servo_states[str(servo_id)].update({
+                'error': True,
                 'status': 'error',
-                'error': str(e)
-            }
+                'message': str(e)
+            })
+            return False
             
     def load_config(self):
         """Lädt die Konfiguration aus der Datei"""
@@ -306,18 +312,36 @@ class ServoKitController:
             return None
             
     def cleanup(self):
-        """Räumt auf und gibt Ressourcen frei"""
+        """Räumt die Ressourcen auf"""
         try:
-            # Deaktiviere alle Servos
+            # Setze alle Servos auf 0
             for i in range(16):
-                # Setze PWM auf 0 um den Servo stromlos zu machen
-                self.kit1._pca.channels[i].duty_cycle = 0
-            
-            self.logger.info("Alle Servos deaktiviert")
-            
+                self.kit1.servo[i].angle = None
+            self.logger.info("Alle Servos wurden auf 0 gesetzt")
         except Exception as e:
-            self.logger.error(f"Fehler beim Aufräumen: {e}")
-            
+            self.logger.error(f"Fehler beim Cleanup: {str(e)}")
+
+    def emergency_stop(self):
+        """Notfall-Abschaltung: Schaltet alle Servos stromlos"""
+        try:
+            self.logger.warning("Notfall-Abschaltung wird ausgeführt!")
+            # Setze alle Servos auf None (stromlos)
+            for i in range(16):
+                self.kit1.servo[i].angle = None
+                # Aktualisiere Status
+                self.servo_states[str(i)].update({
+                    'position': 'emergency_stop',
+                    'current_angle': None,
+                    'last_move': time.time(),
+                    'error': False,
+                    'status': 'emergency_stop'
+                })
+            self.logger.info("Notfall-Abschaltung erfolgreich ausgeführt")
+            return True
+        except Exception as e:
+            self.logger.error(f"Fehler bei der Notfall-Abschaltung: {str(e)}")
+            return False
+
     def __del__(self):
         """Destruktor - wird beim Löschen des Objekts aufgerufen"""
         self.cleanup()
@@ -493,3 +517,68 @@ class ServoKitController:
         except Exception as e:
             self.logger.error(f"Fehler beim Aktualisieren der Servo-Konfiguration: {str(e)}")
             raise
+
+    def _schedule_power_off(self, servo_id):
+        """Plant das Abschalten eines Servos nach dem Timeout"""
+        # Breche vorherigen Timer ab, falls vorhanden
+        if self.servo_states[str(servo_id)].get('power_off_timer') is not None:
+            try:
+                self.servo_states[str(servo_id)]['power_off_timer'].cancel()
+            except:
+                pass
+        
+        # Erstelle neuen Timer
+        if self.power_save_enabled:
+            timer = threading.Timer(
+                self.power_save_timeout, 
+                self._power_off_servo, 
+                args=[servo_id]
+            )
+            timer.daemon = True  # Damit der Timer den Prozess nicht blockiert
+            timer.start()
+            self.servo_states[str(servo_id)]['power_off_timer'] = timer
+            self.logger.debug(f"Timer für Servo {servo_id} gestartet - Abschaltung in {self.power_save_timeout} Sekunden")
+    
+    def _power_off_servo(self, servo_id):
+        """Schaltet einen Servo stromlos"""
+        try:
+            if self.kit1 is None:
+                return
+                
+            self.logger.info(f"Schalte Servo {servo_id} stromlos (Energiesparfunktion)")
+            
+            # Speichere aktuelle Position und Winkel
+            current_position = self.servo_states[str(servo_id)].get('position')
+            current_angle = self.servo_states[str(servo_id)].get('current_angle')
+            
+            # Schalte PWM-Signal ab
+            self.kit1.servo[servo_id].angle = None
+            
+            # Aktualisiere Status (Position und Winkel bleiben erhalten)
+            self.servo_states[str(servo_id)].update({
+                'power_state': 'off',
+                'status': 'power_save'
+            })
+            
+        except Exception as e:
+            self.logger.error(f"Fehler beim Stromlos-Schalten von Servo {servo_id}: {str(e)}")
+    
+    def set_power_save_timeout(self, timeout_seconds):
+        """Setzt den Timeout für die Energiesparfunktion"""
+        self.power_save_timeout = float(timeout_seconds)
+        self.logger.info(f"Energiespar-Timeout auf {self.power_save_timeout} Sekunden gesetzt")
+    
+    def enable_power_save(self, enabled=True):
+        """Aktiviert oder deaktiviert die Energiesparfunktion"""
+        self.power_save_enabled = enabled
+        self.logger.info(f"Energiesparfunktion {'aktiviert' if enabled else 'deaktiviert'}")
+        
+        # Wenn deaktiviert, alle Timer abbrechen
+        if not enabled:
+            for servo_id in range(16):
+                if self.servo_states[str(servo_id)].get('power_off_timer') is not None:
+                    try:
+                        self.servo_states[str(servo_id)]['power_off_timer'].cancel()
+                        self.servo_states[str(servo_id)]['power_off_timer'] = None
+                    except:
+                        pass
